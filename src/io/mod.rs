@@ -20,11 +20,11 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
         tracing::info!("Building with input={} output={}", opts.input, opts.output);
     }
 
-    // parse excel
-    let (abstracts, sessions) = excel::parse_workbook(&opts.input)?;
+    // validate input (parse + reference checks)
+    crate::validation::validate_input(&opts.input)?;
 
-    // validate
-    crate::validation::validate_refs(&abstracts, &sessions)?;
+    // parse excel (again to obtain values for the build path)
+    let (abstracts, sessions) = excel::parse_workbook(&opts.input)?;
 
     // If requested, emit a parse JSON and exit
     if opts.emit_parse_json {

@@ -2,9 +2,12 @@ use crate::model::{Abstract, Session};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
-pub fn validate_input(_input: &str) -> Result<()> {
-    // placeholder: would open and validate workbook
-    anyhow::bail!("Not implemented: validate_input");
+pub fn validate_input(input: &str) -> Result<()> {
+    // parse workbook (this now performs strict header checks and duplicate-id errors)
+    let (abstracts, sessions) = crate::io::parse_workbook(input)?;
+    // ensure every referenced id exists
+    validate_refs(&abstracts, &sessions)?;
+    Ok(())
 }
 
 pub fn validate_refs(abstracts: &HashMap<String, Abstract>, sessions: &Vec<Session>) -> Result<()> {

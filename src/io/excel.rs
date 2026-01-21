@@ -251,7 +251,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
 
         if !aid.is_empty() {
             if seen.contains_key(&aid) {
-                tracing::warn!("Duplicate abstract id found: {} at row {}", aid, ridx + 1);
+                return Err(anyhow!("Duplicate abstract id found: {} at row {}", aid, ridx + 1));
             }
             seen.insert(aid.clone(), ridx + 1);
         }
@@ -530,7 +530,7 @@ pub fn parse_two_workbooks(
 
         if !aid.is_empty() {
             if seen.contains_key(&aid) {
-                tracing::warn!("Duplicate abstract id found: {} at row {}", aid, ridx + 1);
+                return Err(anyhow!("Duplicate abstract id found: {} at row {}", aid, ridx + 1));
             }
             seen.insert(aid.clone(), ridx + 1);
         }

@@ -101,18 +101,24 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         // load localized labels from templates/starter/locales/<locale>.toml if present
         let labels = load_locale_labels(locale).unwrap_or_else(|_| default_labels());
 
-        // build generated content into a string
+        // build generated content into a string, and build a TOC with anchors
         let mut gen = String::new();
+        let mut toc = String::new();
         gen.push_str(&format!("# {}\n", labels.get("title").unwrap_or(&"Symposium 2026".to_string())));
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             for (sess_title, abstracts) in sess_list {
                 gen.push_str(&format!("\n# {}\n", sess_title));
+                toc.push_str(&format!("\n# {}\n", sess_title));
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
                 for (fm, body) in abs_sorted {
-                    gen.push_str(&format!("\n## {}\n", fm.title));
+                    // create a safe anchor id from fm.id
+                    let anchor_id = fm.id.replace(' ', "-").to_lowercase();
+                    // add anchor + heading
+                    gen.push_str(&format!("anchor({})\n## {}\n", anchor_id, fm.title));
+                    // add authors/affiliation
                     if let Some(auths) = &fm.authors {
                         gen.push_str(&format!("{}: {}\n", labels.get("authors_label").unwrap(), auths.join(", ")));
                     }
@@ -120,6 +126,9 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                         gen.push_str(&format!("{}: {}\n", labels.get("affiliation_label").unwrap(), aff));
                     }
                     gen.push_str(&format!("\n{}\n", body));
+
+                    // add TOC entry linking to anchor
+                    toc.push_str(&format!("- link(#{}){{{}}}\n", anchor_id, fm.title));
                 }
             }
         } else {
@@ -151,13 +160,23 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                     s.dedup();
                     s
                 };
-                // include a simple anchor reference per title (the markdown filenames are not known here, use ids if needed)
-                gen.push_str(&format!("- {}: {}\n", k, uniq.join("; ")));
+                // include a simple anchor reference per title (use id-based anchors)
+                let links: Vec<String> = uniq
+                    .iter()
+                    .map(|t| {
+                        // best-effort: slugify the title for link reference
+                        let a = t.replace(' ', "-").to_lowercase();
+                        format!("link(#{}){{{}}}", a, t)
+                    })
+                    .collect();
+                gen.push_str(&format!("- {}: {}\n", k, links.join("; ")));
             }
         }
 
-        // merge with template: replace placeholders and insert content
-        let mut out_text = if template_text.contains("{{CONTENT}}") {
+        // If template contains a TOC placeholder, inject generated TOC first
+        let merged = if template_text.contains("{{TOC}}") {
+            template_text.replace("{{TOC}}", &toc).replace("{{CONTENT}}", &gen)
+        } else if template_text.contains("{{CONTENT}}") {
             template_text.replace("{{CONTENT}}", &gen)
         } else if !template_text.is_empty() {
             format!("{}\n{}", template_text, gen)
@@ -166,7 +185,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         };
 
         // replace other placeholders
-        out_text = out_text.replace("{{LOCALE}}", locale);
+        let mut out_text = merged.replace("{{LOCALE}}", locale);
         out_text = out_text.replace("{{TITLE}}", labels.get("title").unwrap_or(&"Symposium 2026".to_string()));
 
         let mut f = File::create(&path)?;

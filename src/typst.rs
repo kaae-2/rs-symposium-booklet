@@ -126,14 +126,48 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
             gen.push_str(&format!("# No content for locale '{}'.\n", locale));
         }
 
-        // merge with template: replace `{{CONTENT}}` or append
-        let out_text = if template_text.contains("{{CONTENT}}") {
+    // build an index from keywords
+    let mut keyword_map: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+        if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
+            for (_sess_title, abstracts) in sess_list {
+                for (fm, _body) in abstracts.iter() {
+                    if let Some(ks) = &fm.keywords {
+                        for k in ks.iter() {
+                            let key = k.trim().to_string();
+                            if key.is_empty() { continue; }
+                            keyword_map.entry(key).or_default().push(fm.title.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        if !keyword_map.is_empty() {
+            gen.push_str("\n## Index\n");
+            for (k, titles) in keyword_map.iter() {
+                let uniq: Vec<String> = {
+                    let mut s = titles.clone();
+                    s.sort();
+                    s.dedup();
+                    s
+                };
+                // include a simple anchor reference per title (the markdown filenames are not known here, use ids if needed)
+                gen.push_str(&format!("- {}: {}\n", k, uniq.join("; ")));
+            }
+        }
+
+        // merge with template: replace placeholders and insert content
+        let mut out_text = if template_text.contains("{{CONTENT}}") {
             template_text.replace("{{CONTENT}}", &gen)
         } else if !template_text.is_empty() {
             format!("{}\n{}", template_text, gen)
         } else {
             gen
         };
+
+        // replace other placeholders
+        out_text = out_text.replace("{{LOCALE}}", locale);
+        out_text = out_text.replace("{{TITLE}}", labels.get("title").unwrap_or(&"Symposium 2026".to_string()));
 
         let mut f = File::create(&path)?;
         write!(f, "{}", out_text)?;

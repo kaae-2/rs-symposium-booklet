@@ -3,9 +3,9 @@
 
 Phases
 
-- Phase 1: Project skeleton, CLI, Excel parsing, validation, markdown & manifest generation, starter typst emitter (COMPLETED).
-- Phase 2: Typst invocation, localized typst generation, PDF rendering (IMPLEMENTED: typst invocation is wired; rendering occurs when a `typst` binary is available). Note: typst rendering depends on a local binary; the tool emits `.typ` files and prints the exact `typst compile` commands when the binary is absent.
-- Phase 3: polish (font bundling, watch mode, serve previews) — TODO.
+-- Phase 1: Project skeleton, CLI, Excel parsing, validation, markdown & manifest generation, starter typst emitter (COMPLETED).
+-- Phase 2: Typst invocation, localized typst generation, PDF rendering (PARTIAL: typst invocation is wired and emitter produces `.typ` files; however generated Typst contains syntax issues and needs sanitization before reliable rendering). Note: typst rendering depends on a local binary; the tool emits `.typ` files and prints the exact `typst compile` commands when the binary is absent.
+-- Phase 3: polish (font bundling, watch mode, serve previews) — TODO.
 
 Modules (file-level) — status
 
@@ -15,7 +15,7 @@ Modules (file-level) — status
 - `src/model.rs` — data models: `Abstract`, `Session`, `Manifest` (implemented)
 - `src/io/markdown.rs` — slugging and writing markdown files (implemented)
 - `src/io/plan.rs` — dry-run planning model (implemented)
-- `src/typst.rs` — typst template generation and invocation (implemented: emits `.typ` files, produces plan entries, and optionally runs typst if binary present)
+-- `src/typst.rs` — typst template generation and invocation (implemented: emits `.typ` files and plan entries; needs fixes to ensure output is valid Typst and templates are sanitized before merging)
 - `src/validation.rs` — validation utilities and errors (implemented: validate_input + reference checks)
 - `src/log.rs` — tracing initialization (implemented)
 - Tests & fixtures (partial): unit and integration tests referenced in docs; add or expand where needed.

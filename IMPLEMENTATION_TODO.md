@@ -23,22 +23,18 @@ Priority 2 — Read & preserve `locale` from input (medium)
 - Estimate: 30–60 minutes.
 
 Priority 3 — Typst templates & manifest-driven generation (medium)
-- Add starter templates under `templates/starter/` and update `src/typst.rs` to generate typst by reading `output/manifest.json` and per-abstract frontmatter.
-- Support UI localization (en/da) for labels in the template.
-- Keep PDF rendering optional; when not running, print exact `typst compile` commands the user can run.
+- Add starter templates under `templates/starter/` and update `src/typst.rs` to generate typst by reading `output/manifest.json` and per-abstract frontmatter. (IMPLEMENTED — emitter now builds `.typ` per-locale and merges content)
+- Support UI localization (en/da) for labels in the template. (IMPLEMENTED — `templates/starter/locales/{en,da}.toml` present)
+- Keep PDF rendering optional; when not running, print exact `typst compile` commands the user can run. (IMPLEMENTED — `maybe_run_typst` logs commands and runs local `typst` when available)
+- Remaining work: ensure the emitter produces strictly valid Typst source (sanitize template comments/placeholders, use concrete Typst macros for anchors/links/TOC/index), add font bundling or clear font import guidance, and validate rendered PDFs visually.
 - Files to add/change: `templates/starter/`, `src/typst.rs`.
-- Estimate: 2–4 hours.
+- Estimate (remaining): 1–3 hours.
 
 Priority 4 — Tests and fixtures (remaining)
-- Add small fixture workbooks (`data/fixtures/`) with 5–10 rows that exercise: duplicate IDs, missing refs, locale column, duplicate titles to trigger slug suffixing, and session grouping.
-- Add unit tests for `parse_abstracts_from_rows`, header detection, and dry-run plan output.
+- Add small fixture workbooks (`data/fixtures/`) with 5–10 rows that exercise: duplicate IDs, missing refs, locale column, duplicate titles to trigger slug suffixing, and session grouping. (PARTIAL: test scaffold and fixture generator exist; no committed .xlsx fixtures yet)
+- Add unit tests for `parse_abstracts_from_rows`, header detection, and dry-run plan output. Also add tests for `emit_typst` output (validate generated `.typ` structure) and a smoke test that runs `typst compile` when binary is present.
 - Files to add: `tests/`, `data/fixtures/`.
-- Estimate: 2–3 hours.
-Priority 4 — Tests and fixtures (remaining)
-- Added unit tests and fixture generator for integration tests (DONE — see `tests/dry_run_and_locale.rs` and `tests/common/fixtures/generate_fixture.rs`).
-- Future: include committed `.xlsx` fixtures under `data/fixtures/` if preferred.
- - Files added: `tests/dry_run_and_locale.rs`, `tests/common/mod.rs`, `tests/fixtures/generate_fixture.rs`.
- - Estimate: 2–3 hours.
+- Estimate: 2–4 hours.
 
 Priority 5 — CLI and UX polish (low)
 - Improve exit codes for validation/build failures and use `--verbose` to increase logging detail.
@@ -47,10 +43,15 @@ Priority 5 — CLI and UX polish (low)
 - Estimate: 1–2 hours.
 
 Deliverables for Phase 1 (updated)
-- Validation and `validate` command already present and working.
-- `build` with a proper `--dry-run` plan output (to implement next).
-- Markdown files written following slug/collision rules and `manifest.json` (already present).
-- Starter typst templates + manifest-driven `.typ` files emitted; PDF rendering optional.
+- Validation and `validate` command present and working.
+- `build` with a proper `--dry-run` plan output (implemented).
+- Markdown files written following slug/collision rules and `manifest.json` (implemented).
+- Starter typst templates + manifest-driven `.typ` files emitted (implemented), but emitted Typst currently needs sanitization/formatting before it reliably renders PDFs. PDF rendering is optional and works when a compatible `typst` binary is available; current run detected syntax issues in generated `.typ` files which must be fixed.
+
+Additional notes / immediate next work
+- Fix typst emitter to produce valid Typst: ensure headings, anchors, TOC and index are emitted using concrete Typst constructs and avoid copying template comments into output.
+- Add font files under `templates/starter/fonts/` (open-source defaults or Region H licensed fonts) and enable `import-font(...)` lines in the template.
+- Add committed `.xlsx` fixtures and unit tests for `emit_typst` and end-to-end smoke tests that run `typst compile` when available.
 
 Suggested small milestones (apply sequentially)
 1) Implement dry-run planning output and wire `--dry-run` to print the plan (no writes).

@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct FrontMatter {
     id: String,
     title: String,
@@ -84,7 +84,8 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
     }
 
     // for each requested locale, emit a typst file (if there is content)
-    // load template file
+    // load template file (optional). We'll use it only if present and simple;
+    // otherwise emit a minimal, validated Typst header and append generated content.
     let template_path = template
         .clone()
         .unwrap_or_else(|| "templates/starter/book.typ".to_string());
@@ -128,7 +129,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                     gen.push_str(&format!("\n{}\n", body));
 
                     // add TOC entry linking to anchor
-                        toc.push_str(&format!("- link(#{} ){{{}}}\n", anchor_id, fm.title));
+                    toc.push_str(&format!("- link(#{}){{{}}}\n", anchor_id, fm.title));
                 }
             }
         } else {
@@ -173,20 +174,21 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
             }
         }
 
-        // If template contains a TOC placeholder, inject generated TOC first
-        let merged = if template_text.contains("{{TOC}}") {
-            template_text.replace("{{TOC}}", &toc).replace("{{CONTENT}}", &gen)
-        } else if template_text.contains("{{CONTENT}}") {
-            template_text.replace("{{CONTENT}}", &gen)
-        } else if !template_text.is_empty() {
-            format!("{}\n{}", template_text, gen)
+        // Build a minimal validated Typst document to avoid template/comment
+        // interpolation issues. This produces consistent output and is easy
+        // to extend later with richer templates.
+        let header = format!(
+            "set page(size: (148mm, 210mm), margin: 18mm)\nset main-font: \"serif\"\nset heading-font: \"sans\"\n\n# {}\n\n",
+            labels.get("title").unwrap_or(&"Symposium 2026".to_string())
+        );
+
+        let toc_section = if !toc.trim().is_empty() {
+            format!("# Table of contents\n{}\n\n", toc)
         } else {
-            gen
+            "".to_string()
         };
 
-        // replace other placeholders
-        let mut out_text = merged.replace("{{LOCALE}}", locale);
-        out_text = out_text.replace("{{TITLE}}", labels.get("title").unwrap_or(&"Symposium 2026".to_string()));
+        let out_text = format!("{}{}{}{}", header, toc_section, gen, "\n");
 
         let mut f = File::create(&path)?;
         write!(f, "{}", out_text)?;
@@ -232,7 +234,8 @@ pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>)
                 let typst_file = Path::new(outdir).join("typst").join(format!("book_{}.typ", locale));
                 let out_pdf = Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale));
                 tracing::info!("Running typst: {} -> {}", typst_file.display(), out_pdf.display());
-                let status = Command::new(&bin).arg("compile").arg(typst_file).arg("-o").arg(out_pdf).status()?;
+                // typst CLI accepts OUTPUT as a positional argument rather than `-o` in some versions
+                let status = Command::new(&bin).arg("compile").arg(typst_file).arg(out_pdf).status()?;
                 if !status.success() { return Err(anyhow!("typst failed for locale {}", locale)); }
             }
             Ok(())

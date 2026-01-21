@@ -12,6 +12,24 @@ pub struct Cli {
 pub enum Commands {
     /// Build markdown files and optionally render PDFs
     Build(BuildOpts),
+    /// Emit typst files from an existing output directory (manifest + markdowns)
+    EmitTypst {
+        /// Output directory containing manifest.json and per-session markdowns
+        #[arg(long)]
+        output: String,
+
+        /// Template directory override
+        #[arg(long)]
+        template: Option<String>,
+
+        /// Comma separated locales (default en,da)
+        #[arg(long, default_value = "en,da")]
+        locales: String,
+
+        /// Path to typst binary
+        #[arg(long)]
+        typst_bin: Option<String>,
+    },
     /// Validate input files without writing output
     Validate {
         /// Input workbook or directory

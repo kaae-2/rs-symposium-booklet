@@ -26,3 +26,8 @@ Index and keywords
 Localization
 
 - Each markdown file retains `locale: da` for content. Typst templates will read `manifest.json` and generate UI-localized labels per output locale. 
+
+Notes on current implementation
+
+- The emitter writes `output/typst/book_<locale>.typ` by merging a starter template with generated content. Currently the emitter may inadvertently copy template comments or markdown-style fragments into the output, producing invalid Typst source that fails during `typst compile`.
+- Recommended remediation: either make `templates/starter/book.typ` a minimal, valid Typst wrapper with a single `{{CONTENT}}` placeholder (no placeholder mentions inside comments), or update the emitter to produce fully validated Typst output (preferred). Also add unit tests and a small fixture to verify emitted `.typ` files parse with `typst`.

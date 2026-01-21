@@ -10,27 +10,32 @@ set page(size: (148mm, 210mm), margin: 18mm)
 // font family variables (semantic)
 // body: serif, headings: sans
 // Fonts
-// Place font files (woff/ttf) in templates/starter/fonts/ and register
-// them here using Typst's `import-font` or `font` functions. Example:
+// If you want to ship fonts with the template, place them in
+// `templates/starter/fonts/` and uncomment the import-font lines below.
+// Typst will fail if import-font points to a missing file, so keep
+// these lines commented unless the font files are present.
 // import-font("templates/starter/fonts/SourceSerif4-Regular.ttf") as "SourceSerif";
-// set main-font: "SourceSerif"; // fallback will be used if import fails
+// import-font("templates/starter/fonts/SourceSans3-Regular.ttf") as "SourceSans";
 
-// Header & Footer
-// The template provides simple header/footer placeholders. For a real
-// Typst layout you can replace these with `page(header: ...)` and
-// `page(footer: ...)` expressions or use a dedicated macro.
-// Example (pseudocode):
-// set page(header: (row(text[10pt]{SESSION NAME}, align:right, text[10pt]{Page {page} / {total}})), footer: (center(text[9pt]{© Hospital})))
+// Semantic font settings (fall back to generic families)
+set main-font: 'serif';
+set heading-font: 'sans';
+
+// Header & footer (simple implementation using Typst page settings)
+// Replace session placeholder with a dynamic value if desired.
+set page(
+  header: (row(text[9pt]{Session: }, text[9pt bold]{SESSION NAME}, align: right, text[9pt]{Page {page} / {pages}})),
+  footer: (center(text[9pt]{© Region H — Symposium 2026}))
+)
 
 // Document title
-// (Rendered as a large heading at the start)
-# {{TITLE}}
+# (text[28pt bold]{ {{TITLE}} })
 
 // Locale marker (informational)
 // Generated for locale: {{LOCALE}}
 
-// Table of contents (Typst `toc()` can be used in advanced templates)
-// toc()
+// Table of contents — replaced by emitter when {{TOC}} present
+{{TOC}}
 
 // Main content placeholder
 {{CONTENT}}

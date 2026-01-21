@@ -128,7 +128,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                     gen.push_str(&format!("\n{}\n", body));
 
                     // add TOC entry linking to anchor
-                    toc.push_str(&format!("- link(#{}){{{}}}\n", anchor_id, fm.title));
+                        toc.push_str(&format!("- link(#{} ){{{}}}\n", anchor_id, fm.title));
                 }
             }
         } else {

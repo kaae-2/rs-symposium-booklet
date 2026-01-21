@@ -40,7 +40,8 @@ Milestones
 Notes:
 - Dry-run planning implemented: see `src/io/plan.rs`, `src/io/markdown.rs::write_markdown_plan`, and `src/typst.rs::emit_typst_plan` which produce a human-readable and JSON plan when `--dry-run` is used.
  - Dry-run planning implemented: see `src/io/plan.rs`, `src/io/markdown.rs::write_markdown_plan`, and `src/typst.rs::emit_typst_plan` which produce a human-readable and JSON plan when `--dry-run` is used.
- - Locale detection implemented: `src/io/excel.rs` detects an optional `locale` or `sprog` header and populates `Abstract.locale`. Tests added in `tests/dry_run_and_locale.rs`.
+- Locale detection implemented: `src/io/excel.rs` detects an optional `locale` or `sprog` header and populates `Abstract.locale`. Tests added in `tests/dry_run_and_locale.rs`.
+ - Tests & fixtures: unit tests for parsing, slug collisions, and plan generation added; a small fixture generator uses `umya-spreadsheet` for integration testing (`tests/fixtures/generate_fixture.rs`).
 4) Typst invocation + PDF building
 
 Estimated times (rough)

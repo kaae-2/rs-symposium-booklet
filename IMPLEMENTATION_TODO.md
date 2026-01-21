@@ -34,6 +34,11 @@ Priority 4 — Tests and fixtures (remaining)
 - Add unit tests for `parse_abstracts_from_rows`, header detection, and dry-run plan output.
 - Files to add: `tests/`, `data/fixtures/`.
 - Estimate: 2–3 hours.
+Priority 4 — Tests and fixtures (remaining)
+- Added unit tests and fixture generator for integration tests (DONE — see `tests/dry_run_and_locale.rs` and `tests/common/fixtures/generate_fixture.rs`).
+- Future: include committed `.xlsx` fixtures under `data/fixtures/` if preferred.
+ - Files added: `tests/dry_run_and_locale.rs`, `tests/common/mod.rs`, `tests/fixtures/generate_fixture.rs`.
+ - Estimate: 2–3 hours.
 
 Priority 5 — CLI and UX polish (low)
 - Improve exit codes for validation/build failures and use `--verbose` to increase logging detail.

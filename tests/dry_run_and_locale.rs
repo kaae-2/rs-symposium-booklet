@@ -3,6 +3,10 @@ use symposium_booklet::io::markdown::write_markdown_plan;
 use symposium_booklet::io::plan::PlanAction;
 use symposium_booklet::model::{Abstract, Session, ItemRef};
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+mod common;
+use common::fixtures::make_fixture;
 
 #[test]
 fn parse_rows_detects_locale_column() {
@@ -55,4 +59,26 @@ fn write_markdown_plan_includes_locale_and_paths() {
         }
     }
     assert!(found, "expected a WriteFile plan entry mentioning locale:en");
+}
+
+#[test]
+fn integration_fixture_runs_binary_dry_run() {
+    // generate a small fixture workbook
+    let fixture_dir = "target/test-fixtures";
+    let _ = fs::create_dir_all(fixture_dir);
+    let xlsx_path = format!("{}/fixture.xlsx", fixture_dir);
+    make_fixture(&xlsx_path).expect("create fixture");
+
+    let out = "target/test-dry-run-int";
+    let _ = fs::remove_dir_all(out);
+
+    let mut cmd = assert_cmd::Command::cargo_bin("symposium-booklet").unwrap();
+    cmd.args(["build", "--input", &xlsx_path, "--output", out, "--dry-run"]);
+    let assert = cmd.assert().success();
+    let outstr = String::from_utf8(assert.get_output().stdout.clone()).unwrap_or_default();
+    assert!(outstr.contains("DRY-RUN PLAN"));
+    assert!(outstr.contains("PLAN JSON"));
+
+    let _ = fs::remove_dir_all(fixture_dir);
+    let _ = fs::remove_dir_all(out);
 }

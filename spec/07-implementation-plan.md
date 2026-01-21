@@ -1,22 +1,24 @@
+
 07 Implementation Plan
 
 Phases
 
-- Phase 1: Project skeleton, CLI, Excel parsing, validation, markdown & manifest generation, starter typst emitter (no rendering).
-- Phase 2: Typst invocation, localized typst generation, PDF rendering, index generation.
-- Phase 3: polish (font bundling, watch mode, serve previews).
+- Phase 1: Project skeleton, CLI, Excel parsing, validation, markdown & manifest generation, starter typst emitter (COMPLETED).
+- Phase 2: Typst invocation, localized typst generation, PDF rendering (IMPLEMENTED: typst invocation is wired; rendering occurs when a `typst` binary is available). Note: typst rendering depends on a local binary; the tool emits `.typ` files and prints the exact `typst compile` commands when the binary is absent.
+- Phase 3: polish (font bundling, watch mode, serve previews) — TODO.
 
-Modules (file-level)
+Modules (file-level) — status
 
-- `src/main.rs` — CLI entrypoint and subcommand dispatch
-- `src/cli.rs` — clap definitions
-- `src/io/excel.rs` — reading and parsing Excel into domain structs
-- `src/model.rs` — data models: Abstract, Session, Manifest
-- `src/io/markdown.rs` — slugging and writing markdown files
- - `src/io/plan.rs` — dry-run planning model
-- `src/io/typst.rs` — typst template generation and invocation
-- `src/validation.rs` — validation utilities and errors
-- `src/log.rs` — tracing initialization
+- `src/main.rs` — CLI entrypoint and subcommand dispatch (implemented)
+- `src/cli.rs` — clap definitions (implemented)
+- `src/io/excel.rs` — reading and parsing Excel into domain structs (implemented: single-workbook and two-workbook parsing, header detection, duplicate-id checks, locale detection)
+- `src/model.rs` — data models: `Abstract`, `Session`, `Manifest` (implemented)
+- `src/io/markdown.rs` — slugging and writing markdown files (implemented)
+- `src/io/plan.rs` — dry-run planning model (implemented)
+- `src/typst.rs` — typst template generation and invocation (implemented: emits `.typ` files, produces plan entries, and optionally runs typst if binary present)
+- `src/validation.rs` — validation utilities and errors (implemented: validate_input + reference checks)
+- `src/log.rs` — tracing initialization (implemented)
+- Tests & fixtures (partial): unit and integration tests referenced in docs; add or expand where needed.
 
 Key crates
 
@@ -28,24 +30,21 @@ Key crates
 
 Developer workflow
 
-- `cargo run -- build --input data/sheets.xlsx --output out/` to test end-to-end
-- Unit tests for `excel.rs` parsing and `markdown.rs` slugging
+- Use `cargo run -- build --input data/sheets.xlsx --output out/` to test end-to-end; typst render depends on local `typst` binary.
+- `--dry-run` produces a human-readable plan and JSON plan without writing files.
+- `--emit-parse-json` writes `tools_output/parse.json` summarizing parsed abstracts & sessions.
+- Recommended next steps: run unit tests (add if missing), test build with sample Excel files.
 
-Milestones
+Milestones (status)
 
-1) Skeleton + parsing + manifest generation
-2) Markdown writer + manifest examples
-3) Typst emitter + localized templates
+1) Skeleton + parsing + manifest generation — DONE
+2) Markdown writer + manifest examples + dry-run plans — DONE
+3) Typst emitter + localized templates + optional invocation — DONE (typst invocation is optional; rendering requires binary)
+4) Polish: font bundling, watch mode, serve previews — TODO
 
 Notes:
-- Dry-run planning implemented: see `src/io/plan.rs`, `src/io/markdown.rs::write_markdown_plan`, and `src/typst.rs::emit_typst_plan` which produce a human-readable and JSON plan when `--dry-run` is used.
- - Dry-run planning implemented: see `src/io/plan.rs`, `src/io/markdown.rs::write_markdown_plan`, and `src/typst.rs::emit_typst_plan` which produce a human-readable and JSON plan when `--dry-run` is used.
-- Locale detection implemented: `src/io/excel.rs` detects an optional `locale` or `sprog` header and populates `Abstract.locale`. Tests added in `tests/dry_run_and_locale.rs`.
- - Tests & fixtures: unit tests for parsing, slug collisions, and plan generation added; a small fixture generator uses `umya-spreadsheet` for integration testing (`tests/fixtures/generate_fixture.rs`).
-4) Typst invocation + PDF building
-
-Estimated times (rough)
-
-- Phase 1: 6–10 hours
-- Phase 2: 4–8 hours
-- Phase 3: 3–6 hours
+- Dry-run planning implemented: `src/io/plan.rs`, `src/io/markdown.rs::write_markdown_plan`, and `src/typst.rs::emit_typst_plan` produce both pretty and JSON plans used by `--dry-run`.
+- Locale detection implemented in Excel parsing: `src/io/excel.rs` looks for `locale`/`sprog` headers and falls back to sensible defaults; abstracts carry a `locale` field.
+- Duplicate-id detection and strict header checks are enforced by parsing (duplicate abstract ids return errors).
+- Typst rendering: `src/typst.rs::maybe_run_typst` checks `typst --version` and runs `typst compile <file> -o <out.pdf>` per locale if available; otherwise it emits `.typ` files and logs the recommended commands.
+- Unassigned abstracts: parsing groups unreferenced abstracts into an "Unassigned" session automatically.

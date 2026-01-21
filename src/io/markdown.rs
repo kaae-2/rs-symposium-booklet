@@ -40,6 +40,7 @@ pub fn write_markdown(
         let mut items = session.items.clone();
         items.sort_by_key(|i| i.order);
 
+        let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for (idx, item) in items.iter().enumerate() {
             let abs = abstracts
                 .get(&item.id)
@@ -58,7 +59,21 @@ pub fn write_markdown(
                 format!("{:04}-{}", idx + 1, title_safe)
             };
 
-            let path = session_dir.join(format!("{}.md", filename_base));
+            // ensure filename uniqueness within session and vs existing files by
+            // appending `-1`, `-2`, ... when collisions are detected
+            let mut candidate = filename_base.clone();
+            let mut suffix: u32 = 0;
+            loop {
+                let candidate_path = session_dir.join(format!("{}.md", candidate));
+                if !used_names.contains(&candidate) && !candidate_path.exists() {
+                    break;
+                }
+                suffix += 1;
+                candidate = format!("{}-{}", filename_base, suffix);
+            }
+            used_names.insert(candidate.clone());
+
+            let path = session_dir.join(format!("{}.md", candidate));
 
             let mut f = File::create(&path)
                 .map_err(|e| anyhow!("Failed to create file {}: {}", path.display(), e))?;

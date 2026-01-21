@@ -19,6 +19,21 @@ fn as_str(cell: Option<&DataType>) -> String {
     }
 }
 
+fn detect_locale(header_row: &Vec<String>, row: &Vec<String>, col_abstract: usize) -> String {
+    let mut col_locale: Option<usize> = None;
+    for (j, cell) in header_row.iter().enumerate() {
+        let low = cell.to_lowercase();
+        if low.contains("locale") || low.contains("sprog") {
+            col_locale = Some(j);
+            break;
+        }
+    }
+    row.get(col_locale.unwrap_or(col_abstract + 3))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "da".to_string())
+}
+
 pub fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
     for (i, row) in rows.iter().take(12).enumerate() {
         let lowered: Vec<String> = row.iter().map(|c| c.to_lowercase()).collect();
@@ -73,6 +88,15 @@ pub fn parse_abstracts_from_rows(
     let col_literature = find_col(&["litterature", "literature", "references", "literatur"]).unwrap_or(col_reference + 1);
     let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
     let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
+    // detect optional locale column (common to rows in this sheet)
+    let mut col_locale: Option<usize> = None;
+    for (j, cell) in header_row.iter().enumerate() {
+        let low = cell.to_lowercase();
+        if low.contains("locale") || low.contains("sprog") {
+            col_locale = Some(j);
+            break;
+        }
+    }
 
     let mut abstracts: Vec<Abstract> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
@@ -147,6 +171,7 @@ pub fn parse_abstracts_from_rows(
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
+        let locale_val = detect_locale(header_row, row, col_abstract);
 
         abstracts.push(Abstract {
             id: aid.clone(),
@@ -160,7 +185,7 @@ pub fn parse_abstracts_from_rows(
             take_home,
             reference,
             literature,
-            locale: "da".to_string(),
+            locale: locale_val,
         });
     }
 
@@ -399,6 +424,8 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             .filter(|s| !s.is_empty())
             .collect();
 
+        let locale_val = detect_locale(header_row, row, col_abstract);
+
         abstracts.push(Abstract {
             id: aid.clone(),
             title: title.clone(),
@@ -411,7 +438,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             take_home,
             reference,
             literature,
-            locale: "da".to_string(),
+            locale: locale_val,
         });
     }
 
@@ -678,6 +705,22 @@ pub fn parse_two_workbooks(
             .filter(|s| !s.is_empty())
             .collect();
 
+        // detect optional locale column for this workbook
+        let mut col_locale: Option<usize> = None;
+        for (j, cell) in header_row.iter().enumerate() {
+            let low = cell.to_lowercase();
+            if low.contains("locale") || low.contains("sprog") {
+                col_locale = Some(j);
+                break;
+            }
+        }
+
+        let locale_val = row
+            .get(col_locale.unwrap_or(col_abstract + 3))
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "da".to_string());
+
         abstracts.push(Abstract {
             id: aid.clone(),
             title: title.clone(),
@@ -690,7 +733,7 @@ pub fn parse_two_workbooks(
             take_home,
             reference,
             literature,
-            locale: "da".to_string(),
+            locale: locale_val,
         });
     }
 

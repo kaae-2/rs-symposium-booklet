@@ -9,7 +9,8 @@ Sheets
   - `affiliation` (string) — optional, may contain hospital
   - `abstract` (string) — plain text, Danish
   - `keywords` (string) — optional, comma-separated for index
-  - `locale` (string) — optional; default `da`
+- `locale` (string) — optional; default `da`
+  - `locale` (string) — optional; default `da`. The parser will detect a `locale` (or Danish `sprog`) column when present and populate `Abstract.locale` accordingly.
 
 - Sheet B (Inclusion & Sessions): drives which abstracts to include and ordering.
   Two supported shapes (tool will accept either; final shape to be decided when samples are provided):

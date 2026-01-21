@@ -16,9 +16,9 @@ Priority 1 — Dry-run semantics and planning (high)
 - Estimate: 1–2 hours.
 
 Priority 2 — Read & preserve `locale` from input (medium)
-- Currently abstracts default `locale` to "da"; update Excel parsing to detect a `locale` column if present and populate `Abstract.locale` accordingly.
-- Ensure `locale` from the model is preserved in frontmatter (already written by markdown writer).
-- Files to change: `src/io/excel.rs`, tests.
+- Detect `locale` header in Excel and populate `Abstract.locale` (DONE).
+- Ensure `locale` from the model is preserved in frontmatter (already done by markdown writer).
+- Files changed: `src/io/excel.rs` (locale detection), `src/io/markdown.rs` (frontmatter already uses `abs.locale`).
 - Estimate: 30–60 minutes.
 
 Priority 3 — Typst templates & manifest-driven generation (medium)

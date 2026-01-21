@@ -84,6 +84,12 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
     }
 
     // for each requested locale, emit a typst file (if there is content)
+    // load template file
+    let template_path = template
+        .clone()
+        .unwrap_or_else(|| "templates/starter/book.typ".to_string());
+    let template_text = std::fs::read_to_string(&template_path).unwrap_or_else(|_| "".to_string());
+
     for locale in locales_csv
         .split(',')
         .map(|s| s.trim())
@@ -91,33 +97,46 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
     {
         let filename = format!("book_{}.typ", locale);
         let path = typst_dir.join(&filename);
-        let mut f = File::create(&path)?;
 
         // load localized labels from templates/starter/locales/<locale>.toml if present
         let labels = load_locale_labels(locale).unwrap_or_else(|_| default_labels());
 
-        writeln!(f, "# {}", labels.get("title").unwrap_or(&"Symposium 2026".to_string()))?;
+        // build generated content into a string
+        let mut gen = String::new();
+        gen.push_str(&format!("# {}\n", labels.get("title").unwrap_or(&"Symposium 2026".to_string())));
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             for (sess_title, abstracts) in sess_list {
-                writeln!(f, "\n# {}", sess_title)?;
+                gen.push_str(&format!("\n# {}\n", sess_title));
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
                 for (fm, body) in abs_sorted {
-                    writeln!(f, "\n## {}", fm.title)?;
+                    gen.push_str(&format!("\n## {}\n", fm.title));
                     if let Some(auths) = &fm.authors {
-                        writeln!(f, "{}: {}", labels.get("authors_label").unwrap(), auths.join(", "))?;
+                        gen.push_str(&format!("{}: {}\n", labels.get("authors_label").unwrap(), auths.join(", ")));
                     }
                     if let Some(aff) = &fm.affiliation {
-                        writeln!(f, "{}: {}", labels.get("affiliation_label").unwrap(), aff)?;
+                        gen.push_str(&format!("{}: {}\n", labels.get("affiliation_label").unwrap(), aff));
                     }
-                    writeln!(f, "\n{}", body)?;
+                    gen.push_str(&format!("\n{}\n", body));
                 }
             }
         } else {
-            writeln!(f, "# No content for locale '{}'.", locale)?;
+            gen.push_str(&format!("# No content for locale '{}'.\n", locale));
         }
+
+        // merge with template: replace `{{CONTENT}}` or append
+        let out_text = if template_text.contains("{{CONTENT}}") {
+            template_text.replace("{{CONTENT}}", &gen)
+        } else if !template_text.is_empty() {
+            format!("{}\n{}", template_text, gen)
+        } else {
+            gen
+        };
+
+        let mut f = File::create(&path)?;
+        write!(f, "{}", out_text)?;
     }
 
     Ok(())

@@ -1,12 +1,15 @@
 // Starter Typst template (minimal)
-// This template is intentionally small — project will expand with layout, fonts and localization.
-// It expects the generated `.typ` to contain sections and content already.
+// Minimal, valid Typst skeleton. The emitter currently writes full document
+// content into `out/typst/book_<locale>.typ`. Edit this template to add
+// styles, fonts or layout you prefer.
 
 // Page setup
 set page(size: (210mm, 297mm), margin: 20mm)
 
-// Title
-# (center (text[30pt bold]{Symposium 2026}))
+// Document title — styled and centered
+#(center (text[30pt bold]{Symposium 2026}))
 
-// Content follows from generated typst file
-{{CONTENT}}
+// Generated content will follow below. The emitter appends sections and
+// abstracts into the generated typst files; if you want the template to
+// wrap or include the content, update the emitter to merge this template
+// with generated fragments.

@@ -1,0 +1,612 @@
+Digital designmanual 
+Tredjepartsløsninger / version 1.3 
+Region Hovedstaden / 2025
+
+Side 1
+INDHOLDSFORTEGNELSE
+Grundelementer  2
+Logo  2
+Typografi 2
+Farvepalette 3
+Designmarkører  7
+SoMe 8
+Facebook 9
+Instagram 11
+X 13
+LinkedIn 15
+Y outube 17
+Nyhedsbrev  18
+Elementer 19
+T opbillede 20
+Apps  21
+App-ikoner 22
+Eksempel 23
+Tilgængelighed  24
+Digital tilgængelighed 24
+Principmanual for tredjepartsløsninger
+
+Logo for koncern, hospital, psykiatri og virksomhed
+ABCDEFGHIJKLM
+NOPQRSTUVXYZÆØÅ
+abcdefghijklmnopqrstu
+vxyzæøå
+1234567890
+ABCDEFGHIJKLM
+NOPQRSTUVXYZÆØÅ
+abcdefghijklmnopqrstu
+vxyzæøå
+1234567890
+ABCDEFGHIJKLM
+NOPQRSTUVXYZÆØÅ
+abcdefghijklmnopqrstu
+vxyzæøå
+1234567890
+ABCDEFGHIJKLM
+NOPQRSTUVXYZÆØÅ
+abcdefghijklmnopqrstu
+vxyzæøå
+1234567890
+Bold
+Regular
+Light
+Book
+Mari
+Side 2
+GRUNDELEMENTER
+Logo 
+Region Hovedstadens identitet er forankret i et logo 
+og navnetræk. Det karakteristiske H er ligeledes 
+grundelementet for regionens underiden titeter. 
+Alle underidentiteter har slægtskab gennem mærket, 
+men er også kendetegnet ved egen identitetsfarve 
+og eget navnetræk.
+Disse organisations- og farveidentiteter er på 
+samme niveau, så de vil aldrig optræde sammen. 
+Logoer i Region Hovedstaden
+• Koncern
+• Hospitaler og akutberedskab
+• Psykiatri
+• Virksomheder  
+(Apoteket og Den Sociale Virksomhed)
+Typografi
+Mari er specialdesignet og Region Hovedstadens 
+profilskabende typografi. Den anvendes både i 
+rubrikker, brødtekst og i navigationen.
+Principmanual for tredjepartsløsninger
+
+Principmanual for tredjepartsløsninger
+Region Hovedstaden / sekundære farver
+RGB
+0,37,85
+100%
+10%
+GradientHEX
+#002555
+RGB
+0,125,187
+204,211,221
+229, 233,238
+100,108,111
+51,51,51
+255,255,255
+RGB
+0,37,85
+HEX
+#002555
+HEX
+#007dbb
+#ccd3dd
+#e5e9ee
+#646c6f
+#333333
+#fffffff
+RGB
+41,85,125
+HEX
+#29557d
+Region Hovedstaden / primær farve
+Side 3
+GRUNDELEMENTER
+Farvepalette, Region Hovedstaden
+Region Hovedstadens farvepalette består af en 
+primær farve og en række sekundære farver. 
+Den primære farve er identitetsfarven.
+
+RGB
+0,125,187
+100%
+10%
+GradientHEX
+#007dbb
+RGB
+0,95,143
+HEX
+#005f8f
+RGB
+0,125,187
+HEX
+#007dbb
+RGB
+0,156,232
+204,211,221
+229,242,248
+100,108,111
+51,51,51
+255,255,255
+HEX
+#009ce8
+#cce5f1
+#e5f2f8
+646c6f
+#333333
+#fffffff
+Hospital / sekundære farver
+Hospital / primær farve
+Side 4
+GRUNDELEMENTER
+Farvepalette, hospital
+Hospitalernes farvepalette består af en primær 
+farve og en række sekundære farver. 
+Den primære farve er identitetsfarven. 
+Principmanual for tredjepartsløsninger
+
+RGB
+79,131,37
+100%
+10%
+GradientHEX
+#4f8325
+RGB
+60,99,28
+HEX
+#3c631c
+RGB
+79,131,37
+HEX
+#4F8325
+Psykiatri/ primær farve
+RGB
+102,191,15
+235,239,232
+100,108,111
+51,51,51
+255,255,255
+HEX
+#66bf0f
+#ebefe8
+#646c6f
+#333333
+#fffffff
+Psykiatri / sekundære farver
+RGB
+240, 249, 231
+193,223,135
+122,180,78
+HEX
+#f0f9e7
+#c1df87
+##7ab44e
+Side 5
+GRUNDELEMENTER 
+Farvepalette, Psykiatri
+Psykiatriens farvepalette består af en primær farve 
+og en række sekundære farver. 
+Den primære farve er identitetsfarven. 
+Principmanual for tredjepartsløsninger
+
+RGB
+73,125,131
+100%
+10%
+GradientHEX
+#497d83
+RGB
+51,87,91
+HEX
+#33575b
+RGB
+73,125,131
+HEX
+#497d83
+Virksomheder / primær farve
+RGB
+100,170,178
+236,242,242
+100, 108, 111
+51,51,51
+255,255,255
+RGB
+133,242,202
+59,101,106
+HEX
+#64aab2
+#ecf2f2
+#646c6f
+#333333
+#fffffff
+HEX
+#85ccc9
+#3b656a
+Virksomheder / sekundære farver
+Side 6
+GRUNDELEMENTER 
+Farvepalette, virksomheder
+Virksomhedernes farvepalette består af en primær 
+farve og en række sekundære farver. 
+Den primære farve er identitetsfarven. 
+Principmanual for tredjepartsløsninger
+
+4
+5
+Side 7
+GRUNDELEMENTER Principmanual for tredjepartsløsninger
+8
+4
+2
+1 Venstr estillet logo  
+Identitetsbånd
+Baggrunde
+Navigationspile Links
+Footer/afsender
+Typograﬁ
+Hovedrubrik
+6
+Designmarkører 
+Følgende elementer skal ses som designmarkører 
+og bør derfor indgå i digitale tredjepartsløsninger, 
+så man oplever en visuel sammenhæng til Region 
+Hovedstadens øvrige design.
+Her i prioriterede rækkefølge:
+1.  Venstrestillet logo i en harmonisk størrelse og 
+indplaceret på en hvid baggrund / header.  
+Evt. navn på website/system som tagline - 
+vandret  centreret og sat med Mari Light.  
+2.  Identitetsbånd med gradient, som tager
+udgangspunkt i de primære farver.
+3.  Typograﬁ - der bruges altid Mari i rubrikker, 
+brødtekst og navigation:
+- Mari Light (hovedrubrik)
+- Mari Bold (øvrige rubrikker og navigation)
+- Mari Book (manchet)
+- Mari Regular (brødtekst)
+Tekstfarve er enten primærfarve, hvid eller 
+grå (#333333). 
+4 . H ovedrubrikker i Mari Light i stor punkt-
+størrelse.
+6. Navigationspile som navigationsmarkører. 
+Navigationspile og titeltekst i bokse sættes 
+med respektiv identitetsfarve.
+Links i brødtekst i primær farve. RegionH som
+koncern dog samme linkfarve som hospitaler.  
+5 . Baggrund hvid, mens er bokse er hvide 
+med skygge, lys grå eller en procent af 
+primær farve.
+8.  Footer/afsender i mørk grå (#646c6f) med 
+hvid tekst. 
+Titel på website / system
+5
+3 3
+7
+7. 
+Principmanual for tredjepartsløsninger
+1. Venstrestillet logo 
+2. 2dentitetsbånd 
+3. Typografi
+4. Hovedrubrikker
+5. Baggrund 
+6. Navigationspile 7. Links 
+8. Footer/afsender
+Side 7
+GRUNDELEMENTER
+Designmarkører 
+Følgende elementer skal ses som designmarkører 
+og bør derfor indgå i digitale tredjepartsløsninger, 
+så man oplever en visuel sammenhæng til Region 
+Hovedstadens øvrige design.
+Her i prioriteret rækkefølge:
+• Venstrestillet logo i en harmonisk størrelse 
+(55-60 px i højden) og indplaceret på en hvid 
+baggrund/header.  Evt. navn på website/
+system placeres som tagline – vandret  
+centreret og sat med Mari Light 
+• Identitetsbånd med gradient, som tager 
+udgangspunkt i de primære farver
+• Typografi – der bruges altid Mari i rubrikker, 
+brødtekst og navigation:
+Mari Light (hovedrubrik)
+Mari Bold (øvrige rubrikker og navigation)
+Mari Book (manchet) 
+Mari Regular (brødtekst)
+T ekstfarve er enten primærfarve, 
+hvid eller grå (#333333)
+• Hovedrubrikker i Mari Light i stor punkt-
+størrelse
+• Baggrund hvid, mens bokse er hvide med 
+skygge, lys grå eller en procent af primær farve
+• Navigationspile som navigationsmarkører. 
+Navigationspile og titeltekst i bokse sættes 
+med respektiv identitetsfarve
+• Links i brødtekst i primær farve. RegionH som 
+koncern dog samme linkfarve som hospitaler
+• Footer/afsender i mørk grå (#646c6f) med 
+hvid tekst.
+
+Side 8
+SOME
+Sociale medier
+Designguiden for Region Hovedstadens tredjeparts-
+løsninger tager sit udgangspunkt i webdesign-
+løsningen og dens univers. Der skal være en klar 
+gennemgående genkendelighed mellem alle sociale 
+medieløsninger og apps. Målet med guiden er at 
+skabe overskuelighed og brande Region Hovedstaden. 
+Følgende eksempler skal ses som en guide for sociale 
+platforme. Dette område er evigt ekspanderende. 
+Derfor er det nødvendigt at følge denne guide, så 
+afsenderen altid er klar og tydelig.
+Principmanual for tredjepartsløsninger
+
+Side 9
+1. Coverbillede
+2. Profilbillede
+3. Opslag
+1. Coverbillede
+2. Profilbillede
+Eksempel, desktop Eksempel, mobil
+3. Opslag
+4. Stories
+SOME 
+Facebook
+1. Coverbillede: 
+Desktop: 820 x 312 px 
+Mobil: 640 x 360 px 
+2. Profilbillede (bomærke): 
+400 x 400 px
+3. Opslag: 
+1080 x 1080 px (1:1)
+4. Stories: 
+1080 x 1920 px (9:16) 
+(safe zone 1080 x 1420 px) 
+Principmanual for tredjepartsløsninger
+
+Side 10
+Principmanual for tredjepartsløsninger
+Eksempel fra hospital, psykiatri og virksomhed
+SOME 
+Facebook
+Følgende er konstruerede eksempler, der viser 
+coverbillede og profilbillede (bomærke).
+
+Side 11
+1. Profilbillede
+2. og 3. Opslag /stories
+Eksempel, desktop Eksempel, mobil
+1. Profilbillede
+2. Opslag
+SOME 
+Instagram
+1. Profilbillede (bomærke): 
+400 x 400 px
+2. Opslag: 
+1080 x 1080 px (1:1) 
+eller 1080 x 1350 px (4:5)
+3. Stories: 
+1080 x 1920 px (9:16) 
+(safe zone 1080 x 1420 px)
+Principmanual for tredjepartsløsninger
+
+Side 12
+Eksempel fra hospital, psykiatri og virksomhed
+SOME 
+Instagram
+Følgende er konstruerede eksempler, der viser 
+profilbilleder (bomærker).
+Principmanual for tredjepartsløsninger
+
+Eksempel, desktop Eksempel, mobil
+1. Coverbillede
+2. Profilbillede1. Coverbillede
+2. Profilbillede
+3. Opslag
+3. Opslag
+Side 13
+SOME 
+X
+1. Coverbillede: 
+1500 x 500 px
+2. Profilbillede (bomærke): 
+400 x 400 px
+3. Opslag: 
+Min. 440 x 220 px 
+Max: 1024 x 512 px
+Principmanual for tredjepartsløsninger
+
+Eksempel fra hospital, psykiatri og virksomhed
+Side 14
+SOME 
+X
+Følgende er konstruerede eksempler, der viser 
+coverbillede og profilbillede (bomærke).
+Principmanual for tredjepartsløsninger
+
+Eksempel, desktop Eksempel, mobil
+1. Coverbillede
+2. Profilbillede 
+1. Coverbillede
+2. Profilbillede
+3. Opslag 3. Opslag
+Side 15
+SOME 
+LinkedIn
+1. Coverbillede: 
+1128 x 191 px
+2. Profilbillede (bomærke): 
+400 x 400 px
+3. Opslag: 
+1200 x 628 px
+Principmanual for tredjepartsløsninger
+
+Eksempel fra hospital, psykiatri og virksomhed
+Side 16
+SOME 
+LinkedIn
+Følgende er eksempler, der viser coverbillede og 
+profilbillede.
+Principmanual for tredjepartsløsninger
+
+Eksempel, desktop Eksempel, mobil
+1. Coverbillede
+2. Profilbillede
+3. Video
+1. Coverbillede
+2. Profilbillede 
+3. Video
+Side 17
+SOME 
+Y outube
+1. Coverbillede: 
+2560 x 1440 px
+2. Profilbillede (bomærke): 
+400 x 400 px
+3. Video: 
+1920 x 1080 px (16:9)
+Principmanual for tredjepartsløsninger
+
+Principmanual for tredjepartsløsninger
+Side 18
+NYHEDSBREV 
+Designet af nyhedsbreve har reference til de 
+designelementer, vi benytter på regionens 
+hjemmesider.
+Digitale nyhedsbreve udsendes primært via 
+Ubivox.
+
+1. Bomærke 2. T opbillede
+3. Stort billede
+4. Stor overskrift
+5. Stor brødtekst
+6. Link, positiv7. Adskillerstreg
+8. Lille billede
+9. Lille overskrift
+10. Lille brødtekst
+11. Identitetsbån 12. Link, negativ
+13. Mellemrubrik
+14. Nyhedsboks
+15. Afsender 16. Afsenderboks
+Side 19
+NYHEDSBREV 
+Elementer
+Nyhedsbrevet kan bestå af følgende elementer og 
+tager afsæt i gældende primære og sekundære farver 
+for de enkelte virksomhedsområder, hhv. koncern, 
+hospital, psykiatri og virksomhed, alternativt i særlige 
+kampagnefarver. T opbillede med bomærke + titel og 
+afsender i bund bør dog altid indgå.
+1. Bomærke, højde: 30 px
+2. T opbillede: 600 x valgfri højde, max 150 px
+3. Stort billede: H: 115 px
+4. Stor overskrift: Mari bold /Arial. 18 pkt. 
+Farve: 0, 125, 187
+5. Stor brødtekst: Mari book / Arial. 13pkt. 
+Farve: 51, 51, 51
+6. Link, positiv: Mari book / Arial. 11 pkt. 
+Farve: 51, 51, 51 (eller primærfarve)
+7. Adskillerstreg: 0,5 pkt. Farve: 0, 156, 232
+8. Lille billede: H: 80 px
+9. Lille overskrift: Mari bold /Arial,15 pkt. 
+Farve: 0, 125, 187 
+10. Lille brødtekst: Mari book / Arial, 13 pkt. 
+Farve: sort 
+11. Identitetsbånd: H: 80 px. Farve: Gradient  
+Overskrif: Mari bold /Arial, hvid, 15 pkt  
+Brødtekst: Mari bold /Arial, hvid, 11 pkt.
+12. Link, negativ: Farve: 9, 115, 173  
+Mari bold /Arial, hvid, 11 pkt
+13. Mellemrubrik: Mari book /Arial, 15 pkt. 
+Farve: Sort
+14. Nyhedsboks: Farve: 229, 244, 252
+15. Afsender: Overskrif: Mari bold /Arial, hvid, 11 
+pkt. Brødtekst: Mari book /Arial, hvid, 11 pkt
+16. Afsenderboks: Farve: 100, 108, 111
+Principmanual for tredjepartsløsninger
+
+1. Bomærke 2. T opbillede
+1. Logo
+Side 20
+NYHEDSBREV
+T opbillede
+1. Bomærke/logo, højde: 30 px
+2. T opbillede: 600 x 150 px
+Højden på topbilledet er valgfri, dog max. 150 px. 
+Følgende er konstruerede eksempler, der viser 
+bomærke/logo og topbillede.
+Principmanual for tredjepartsløsninger
+
+Side 21
+APPS 
+Apps
+Design af apps skal følge Region Hovedstadens 
+design. Dvs. bomærker, fonte, farver, ikoner mv. 
+skal være i overensstemmelse med intentionerne 
+i designmanualen.
+Principmanual for tredjepartsløsninger
+
+1. App ikoner
+34Digital designmanual / Tredjepartsløsninger
+APPS / EKSEMPLER
+App-ikoner
+Eksempler på ikoner til Apps
+1. Region Hovedstaden, hospitaler, Psykiatri og 
+virksomheder.
+2. Projekter under Region Hovedstaden.
+ Den grå boks til venstre med H, holdes primært 
+i lys grå sekundær farve, den afviger kun hvis 
+ikonet er i samme nuance.
+1
+2
+2. App ikoner  
+(et par eksempler fra  
+projekter under Region 
+Hovedstaden)
+Side 22
+APPS 
+App-ikoner
+Eksempler på ikoner til Apps
+1. Region Hovedstaden, hospitaler, Psykiatri 
+og virksomheder.
+2. Projekter under Region Hovedstaden. 
+Den grå boks til venstre med H, holdes 
+primært i lys grå sekundær farve, den 
+afviger kun hvis ikonet er i samme nuance.
+Principmanual for tredjepartsløsninger
+
+Side 23
+APPS 
+Eksempel
+Designet af appen følger principperne i 
+Region Hovedstadens designmanual. 
+Principmanual for tredjepartsløsninger
+
+TILGÆNGELIGHED
+Digital tilgængelighed
+Alle mennesker har forskellige forudsætninger 
+for at forstå digitalt materiale. Der findes mange 
+forskellige former for handicap, vi som offentlig 
+myndighed er pålagt at forholde os til, fx blindhed, 
+farveblindhed, motoriske handicap, døvhed, 
+kognitive udfordringer og mange andre.
+Den måde, vi er forpligtede til at arbejde med 
+digital handicaptilgængelighed i regionen, er 
+sammenfattet i et sæt retningslinjer, der hedder 
+WCAG 2.1 AA.
+Fx skal kontrast mellem tekst (og andre forgrunds-
+elementer) og baggrund være  på minimum 4,5:1.
+Det skønnes, at mellem 15 og 25% af brugerne 
+(dog i varierende grad) har gavn af, at man over-
+holder disse retningslinjer.
+Det er således også et krav, at der tænkes i 
+tilgængelighed, når man styler eller udformer nyt 
+design. 
+Side 24
+Principmanual for tredjepartsløsninger
+RegionH Design – 21943

@@ -1,13 +1,89 @@
 use anyhow::{anyhow, Result};
-use std::fs::{create_dir_all, File};
+use serde::Deserialize;
+use serde_json::Value as JsonValue;
+use std::collections::HashMap;
+use std::fs::{create_dir_all, read_dir, read_to_string, File};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+#[derive(Debug, Deserialize)]
+struct FrontMatter {
+    id: String,
+    title: String,
+    authors: Option<Vec<String>>,
+    affiliation: Option<String>,
+    session: Option<String>,
+    order: Option<u32>,
+    locale: Option<String>,
+    keywords: Option<Vec<String>>,
+}
+
+// Emit typst files by reading `outdir/manifest.json` and per-abstract markdown frontmatter.
 pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) -> Result<()> {
     let typst_dir = Path::new(outdir).join("typst");
     create_dir_all(&typst_dir)?;
 
+    // read manifest
+    let mf_path = Path::new(outdir).join("manifest.json");
+    if !mf_path.exists() {
+        return Err(anyhow!("manifest.json not found in output directory: {}", mf_path.display()));
+    }
+    let mf_text = read_to_string(&mf_path)?;
+    let mf: JsonValue = serde_json::from_str(&mf_text)?;
+
+    // build a map locale -> Vec<(session_title, Vec<(frontmatter, body)>)>
+    let mut locales: HashMap<String, Vec<(String, Vec<(FrontMatter, String)>)>> = HashMap::new();
+
+    if let Some(sessions) = mf.get("sessions").and_then(|s| s.as_array()) {
+        for sess in sessions.iter() {
+            let sess_title = sess.get("title").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let sess_slug = sess.get("slug").and_then(|s| s.as_str()).unwrap_or("");
+            if sess_slug.is_empty() {
+                continue;
+            }
+            let session_dir = Path::new(outdir).join(sess_slug);
+            if !session_dir.exists() {
+                continue;
+            }
+            // collect markdown files in session dir
+            let mut abstracts: Vec<(FrontMatter, String)> = Vec::new();
+            let mut entries: Vec<_> = read_dir(&session_dir)?.filter_map(|r| r.ok()).collect();
+            entries.sort_by_key(|e| e.path());
+            for ent in entries {
+                let p = ent.path();
+                if p.extension().and_then(|e| e.to_str()).unwrap_or("") != "md" {
+                    continue;
+                }
+                let txt = read_to_string(&p)?;
+                // parse frontmatter between first two '---' lines
+                if let Some(start) = txt.find("---") {
+                    if let Some(rest) = txt[start + 3..].find("---") {
+                        let fm_text = &txt[start + 3..start + 3 + rest];
+                        let body = txt[start + 3 + rest + 3..].trim().to_string();
+                        match serde_yaml::from_str::<FrontMatter>(fm_text) {
+                            Ok(fm) => abstracts.push((fm, body)),
+                            Err(_) => continue,
+                        }
+                    }
+                }
+            }
+
+            // group abstracts by locale
+            for (fm, body) in abstracts.into_iter() {
+                let locale = fm.locale.clone().unwrap_or_else(|| "en".to_string());
+                let slot = locales.entry(locale).or_insert_with(Vec::new);
+                // find or push session entry
+                if let Some((_, v)) = slot.iter_mut().find(|(t, _)| t == &sess_title) {
+                    v.push((fm, body));
+                } else {
+                    slot.push((sess_title.clone(), vec![(fm, body)]));
+                }
+            }
+        }
+    }
+
+    // for each requested locale, emit a typst file (if there is content)
     for locale in locales_csv
         .split(',')
         .map(|s| s.trim())
@@ -16,50 +92,82 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         let filename = format!("book_{}.typ", locale);
         let path = typst_dir.join(&filename);
         let mut f = File::create(&path)?;
-        writeln!(f, "# Generated typst for locale {}", locale)?;
-        writeln!(f, "# TODO: include manifest parsing and layout")?;
+
+        // load localized labels from templates/starter/locales/<locale>.toml if present
+        let labels = load_locale_labels(locale).unwrap_or_else(|_| default_labels());
+
+        writeln!(f, "# {}", labels.get("title").unwrap_or(&"Symposium 2026".to_string()))?;
+
+        if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
+            for (sess_title, abstracts) in sess_list {
+                writeln!(f, "\n# {}", sess_title)?;
+                // sort by order if present
+                let mut abs_sorted = abstracts.clone();
+                abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
+                for (fm, body) in abs_sorted {
+                    writeln!(f, "\n## {}", fm.title)?;
+                    if let Some(auths) = &fm.authors {
+                        writeln!(f, "{}: {}", labels.get("authors_label").unwrap(), auths.join(", "))?;
+                    }
+                    if let Some(aff) = &fm.affiliation {
+                        writeln!(f, "{}: {}", labels.get("affiliation_label").unwrap(), aff)?;
+                    }
+                    writeln!(f, "\n{}", body)?;
+                }
+            }
+        } else {
+            writeln!(f, "# No content for locale '{}'.", locale)?;
+        }
     }
+
     Ok(())
 }
 
+fn default_labels() -> HashMap<String, String> {
+    let mut m = HashMap::new();
+    m.insert("title".to_string(), "Symposium 2026".to_string());
+    m.insert("authors_label".to_string(), "Authors".to_string());
+    m.insert("affiliation_label".to_string(), "Affiliation".to_string());
+    m
+}
+
+fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
+    let path = Path::new("templates").join("starter").join("locales").join(format!("{}.toml", locale));
+    if !path.exists() {
+        return Err(anyhow!("locale file not found"));
+    }
+    let txt = read_to_string(path)?;
+    let v: toml::Value = toml::from_str(&txt)?;
+    let mut m = HashMap::new();
+    if let Some(t) = v.get("title").and_then(|s| s.as_str()) {
+        m.insert("title".to_string(), t.to_string());
+    }
+    if let Some(a) = v.get("authors_label").and_then(|s| s.as_str()) {
+        m.insert("authors_label".to_string(), a.to_string());
+    }
+    if let Some(a) = v.get("affiliation_label").and_then(|s| s.as_str()) {
+        m.insert("affiliation_label".to_string(), a.to_string());
+    }
+    Ok(m)
+}
+
 pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>) -> Result<()> {
-    let bin = if let Some(p) = typst_bin {
-        p.to_string()
-    } else {
-        "typst".to_string()
-    };
-    // check if command exists by trying --version
+    let bin = if let Some(p) = typst_bin { p.to_string() } else { "typst".to_string() };
     let check = Command::new(&bin).arg("--version").output();
     match check {
         Ok(o) if o.status.success() => {
-            for locale in locales_csv
-                .split(',')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-            {
-                let typst_file = Path::new(outdir)
-                    .join("typst")
-                    .join(format!("book_{}.typ", locale));
+            for locale in locales_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                let typst_file = Path::new(outdir).join("typst").join(format!("book_{}.typ", locale));
                 let out_pdf = Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale));
-                tracing::info!(
-                    "Running typst: {} -> {}",
-                    typst_file.display(),
-                    out_pdf.display()
-                );
-                let status = Command::new(&bin)
-                    .arg("compile")
-                    .arg(typst_file)
-                    .arg("-o")
-                    .arg(out_pdf)
-                    .status()?;
-                if !status.success() {
-                    return Err(anyhow!("typst failed for locale {}", locale));
-                }
+                tracing::info!("Running typst: {} -> {}", typst_file.display(), out_pdf.display());
+                let status = Command::new(&bin).arg("compile").arg(typst_file).arg("-o").arg(out_pdf).status()?;
+                if !status.success() { return Err(anyhow!("typst failed for locale {}", locale)); }
             }
             Ok(())
         }
         _ => {
-            tracing::warn!("Typst binary '{}' not found or not runnable; typst files emitted in {}/typst. Run 'typst compile <file> -o <out.pdf>'", bin, outdir);
+            tracing::warn!("Typst binary '{}' not found or not runnable; typst files emitted in {}/typst.", bin, outdir);
+            tracing::warn!("To render PDFs run: typst compile <typst-file> -o <out.pdf>");
             Ok(())
         }
     }
@@ -73,14 +181,10 @@ pub fn emit_typst_plan(outdir: &str, locales_csv: &str, template: &Option<String
     let typst_dir = Path::new(outdir).join("typst");
     plan.push(PlanAction::CreateDir { path: PathBuf::from(&typst_dir) });
 
-    for locale in locales_csv
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
+    for locale in locales_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
         let filename = format!("book_{}.typ", locale);
         let path = typst_dir.join(&filename);
-        let template_name = template.clone().unwrap_or_else(|| "starter/book.typ".to_string());
+        let template_name = template.clone().unwrap_or_else(|| "templates/starter/book.typ".to_string());
         let cmd = Some(format!("typst compile {} -o {}", path.display(), Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale)).display()));
         plan.push(PlanAction::EmitTypst { path: PathBuf::from(path), template: template_name, command: cmd });
     }

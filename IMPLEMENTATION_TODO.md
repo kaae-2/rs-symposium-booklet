@@ -18,7 +18,8 @@ Priority 1 — Dry-run semantics and planning (high)
 Priority 2 — Read & preserve `locale` from input (medium)
 - Detect `locale` header in Excel and populate `Abstract.locale` (DONE).
 - Ensure `locale` from the model is preserved in frontmatter (already done by markdown writer).
-- Files changed: `src/io/excel.rs` (locale detection), `src/io/markdown.rs` (frontmatter already uses `abs.locale`).
+- Added tests: `tests/dry_run_and_locale.rs` covers locale detection and plan generation.
+- Files changed: `src/io/excel.rs` (locale detection), `src/io/markdown.rs` (frontmatter already uses `abs.locale`), `tests/dry_run_and_locale.rs` (new).
 - Estimate: 30–60 minutes.
 
 Priority 3 — Typst templates & manifest-driven generation (medium)

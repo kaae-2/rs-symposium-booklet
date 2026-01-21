@@ -5,6 +5,9 @@ set page(size: (148mm, 210mm), margin: 18mm)
 set main-font: 'serif'
 set heading-font: 'sans'
 
+// Header with logo
+embed("templates/starter/icons/logo.svg")
+
 # {{TITLE}}
 
 // Generated for locale: {{LOCALE}}

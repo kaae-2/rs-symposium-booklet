@@ -5,12 +5,6 @@ Purpose
 -------
 Concrete next work items to move the project from current prototype to spec-compliant Phase 1.
 
-Priority 1 — Strict validation (done)
-- Header detection is now strict and fails fast for required headers (`id`, `title`, `abstract`).
-- Duplicate abstract IDs abort parsing (warnings converted to errors).
-- `validation::validate_input` implemented and wired to the `symposium-booklet validate` command.
-- Files changed: `src/io/excel.rs`, `src/validation.rs`, `src/io/mod.rs`, `src/main.rs`.
-
 Priority 2 — Dry-run semantics and planning (medium)
 - Implement `--dry-run` to validate and print planned filesystem writes without writing files.
 - Produce a human-readable "plan" (list of files and actions).
@@ -29,10 +23,11 @@ Priority 4 — Typst templates & localization (medium)
 - Files: `src/typst.rs`, new `templates/` directory.
 - Estimate: 2–4 hours.
 
-Priority 5 — Tests and fixtures (done)
-- Added unit tests for header detection, duplicate-id handling, and slug collision behavior under `tests/validation_tests.rs`.
-- Remaining: add fixture Excel workbooks under `data/fixtures/` for integration tests.
-- Files changed: `tests/validation_tests.rs`, `src/io/excel.rs` (test helpers), `src/io/markdown.rs` (slug collision handling).
+Priority 5 — Tests and fixtures (remaining)
+- Add fixture workbooks (5–10 rows) under `data/fixtures/` for integration tests.
+- Add any remaining unit tests for parsing shapes as needed.
+- Files: `tests/`, `data/fixtures/`.
+- Estimate: 2–3 hours.
 
 Priority 6 — CLI and UX polish (low)
 - Improve exit codes on validation failures.

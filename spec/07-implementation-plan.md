@@ -13,6 +13,7 @@ Modules (file-level)
 - `src/io/excel.rs` — reading and parsing Excel into domain structs
 - `src/model.rs` — data models: Abstract, Session, Manifest
 - `src/io/markdown.rs` — slugging and writing markdown files
+ - `src/io/plan.rs` — dry-run planning model
 - `src/io/typst.rs` — typst template generation and invocation
 - `src/validation.rs` — validation utilities and errors
 - `src/log.rs` — tracing initialization
@@ -35,6 +36,9 @@ Milestones
 1) Skeleton + parsing + manifest generation
 2) Markdown writer + manifest examples
 3) Typst emitter + localized templates
+
+Notes:
+- Dry-run planning implemented: see `src/io/plan.rs`, `src/io/markdown.rs::write_markdown_plan`, and `src/typst.rs::emit_typst_plan` which produce a human-readable and JSON plan when `--dry-run` is used.
 4) Typst invocation + PDF building
 
 Estimated times (rough)
@@ -42,4 +46,3 @@ Estimated times (rough)
 - Phase 1: 6–10 hours
 - Phase 2: 4–8 hours
 - Phase 3: 3–6 hours
-

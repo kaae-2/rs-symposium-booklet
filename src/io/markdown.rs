@@ -123,3 +123,81 @@ pub fn write_markdown(
 
     Ok(())
 }
+
+// produce a Plan of filesystem actions without performing writes
+pub fn write_markdown_plan(
+    abstracts: &HashMap<String, Abstract>,
+    sessions: &Vec<Session>,
+    outdir: &str,
+    plan: &mut crate::io::plan::Plan,
+) -> Result<()> {
+    use crate::io::plan::PlanAction;
+    use std::path::PathBuf;
+
+    // ensure output dir would exist
+    plan.push(PlanAction::CreateDir { path: PathBuf::from(outdir) });
+
+    for session in sessions.iter() {
+        let mut slug = slugify(&session.title);
+        if slug.trim().is_empty() {
+            slug = format!("session-{}", session.order);
+        }
+        let slug_safe: String = slug
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .collect();
+        let session_slug = if slug_safe.is_empty() {
+            format!("session-{}", session.order)
+        } else {
+            slug_safe
+        };
+
+        let session_dir = Path::new(outdir).join(&session_slug);
+        plan.push(PlanAction::CreateDir { path: session_dir.clone() });
+
+        let mut items = session.items.clone();
+        items.sort_by_key(|i| i.order);
+
+        let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (idx, item) in items.iter().enumerate() {
+            let abs = abstracts
+                .get(&item.id)
+                .ok_or_else(|| anyhow!(format!("Referenced abstract {} not found", item.id)))?;
+            let mut title_slug = slugify(&abs.title);
+            if title_slug.trim().is_empty() {
+                title_slug = abs.id.clone();
+            }
+            let title_safe: String = title_slug
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            let filename_base = if title_safe.is_empty() {
+                format!("{:04}", idx + 1)
+            } else {
+                format!("{:04}-{}", idx + 1, title_safe)
+            };
+
+            let mut candidate = filename_base.clone();
+            let mut suffix: u32 = 0;
+            loop {
+                let candidate_path = session_dir.join(format!("{}.md", candidate));
+                if !used_names.contains(&candidate) && !candidate_path.exists() {
+                    break;
+                }
+                suffix += 1;
+                candidate = format!("{}-{}", filename_base, suffix);
+            }
+            used_names.insert(candidate.clone());
+
+            let path = session_dir.join(format!("{}.md", candidate));
+            // produce a short summary for plan
+            let summary = format!("{} — locale:{}", abs.title, abs.locale);
+            plan.push(PlanAction::WriteFile { path: PathBuf::from(path), summary });
+        }
+
+        // manifest session entry
+        plan.push(PlanAction::UpdateManifest { path: PathBuf::from(outdir).join("manifest.json"), manifest_summary: format!("session {} => {} items", session.title, session.items.len()) });
+    }
+
+    Ok(())
+}

@@ -64,3 +64,25 @@ pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>)
         }
     }
 }
+
+// Emit a plan of typst files that would be generated.
+pub fn emit_typst_plan(outdir: &str, locales_csv: &str, template: &Option<String>, plan: &mut crate::io::plan::Plan) -> Result<()> {
+    use crate::io::plan::PlanAction;
+    use std::path::PathBuf;
+
+    let typst_dir = Path::new(outdir).join("typst");
+    plan.push(PlanAction::CreateDir { path: PathBuf::from(&typst_dir) });
+
+    for locale in locales_csv
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        let filename = format!("book_{}.typ", locale);
+        let path = typst_dir.join(&filename);
+        let template_name = template.clone().unwrap_or_else(|| "starter/book.typ".to_string());
+        let cmd = Some(format!("typst compile {} -o {}", path.display(), Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale)).display()));
+        plan.push(PlanAction::EmitTypst { path: PathBuf::from(path), template: template_name, command: cmd });
+    }
+    Ok(())
+}

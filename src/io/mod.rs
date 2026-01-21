@@ -1,7 +1,9 @@
 pub mod excel;
 pub mod markdown;
+pub mod plan;
 
 pub use excel::{parse_two_workbooks, parse_workbook};
+pub use crate::io::plan::{Plan, PlanAction};
 
 use crate::cli::BuildOpts;
 use anyhow::Result;
@@ -26,6 +28,9 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
     // parse excel (again to obtain values for the build path)
     let (abstracts, sessions) = excel::parse_workbook(&opts.input)?;
 
+    // In dry-run mode, collect a plan of actions instead of writing files
+    let mut plan = Plan::default();
+
     // If requested, emit a parse JSON and exit
     if opts.emit_parse_json {
         let outdir = std::path::Path::new(&opts.output).join("tools_output");
@@ -38,6 +43,18 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
         }))?;
         std::fs::write(&manifest_path, json)?;
         tracing::info!("Wrote parse JSON to {}", manifest_path.display());
+        return Ok(());
+    }
+
+    if opts.dry_run {
+        // ask markdown writer to produce plan entries
+        markdown::write_markdown_plan(&abstracts, &sessions, &opts.output, &mut plan)?;
+        crate::typst::emit_typst_plan(&opts.output, &opts.locales, &opts.template, &mut plan)?;
+
+        // print pretty plan and json to stdout
+        println!("DRY-RUN PLAN:\n{}", plan.pretty_print());
+        let plan_json = serde_json::to_string_pretty(&plan)?;
+        println!("PLAN JSON:\n{}", plan_json);
         return Ok(());
     }
 

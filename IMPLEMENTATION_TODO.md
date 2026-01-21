@@ -1,62 +1,60 @@
 Project Implementation TODO
 ==========================
 
+
 Purpose
 -------
 Concrete next work items to move the project from current prototype to spec-compliant Phase 1.
 
-Priority 2 — Dry-run semantics and planning (medium)
-- Implement `--dry-run` to validate and print planned filesystem writes without writing files.
-- Produce a human-readable "plan" (list of files and actions).
-- Files: `src/io/mod.rs`, `src/io/markdown.rs`, `src/typst.rs`.
+
+Remaining work (ordered by priority)
+
+Priority 1 — Dry-run semantics and planning (high)
+- Implement `--dry-run` behavior that performs validation and emits a human-readable plan of filesystem actions without writing files. (DONE)
+- Produce a plan that lists directories to create, markdown files (path + frontmatter summary), typst files to be emitted, and the final manifest updates. (DONE)
+- Files changed: `src/io/mod.rs` (drive dry-run), `src/io/markdown.rs` (separate plan generation vs write), `src/typst.rs` (emit plan form), `src/io/plan.rs` (new).
 - Estimate: 1–2 hours.
 
-Priority 3 — Filename uniqueness / slug collisions (medium)
-- Ensure unique markdown filenames per session by detecting collisions and appending `-1`, `-2` etc.
-- Files: `src/io/markdown.rs`.
-- Estimate: 1 hour.
+Priority 2 — Read & preserve `locale` from input (medium)
+- Currently abstracts default `locale` to "da"; update Excel parsing to detect a `locale` column if present and populate `Abstract.locale` accordingly.
+- Ensure `locale` from the model is preserved in frontmatter (already written by markdown writer).
+- Files to change: `src/io/excel.rs`, tests.
+- Estimate: 30–60 minutes.
 
-Priority 4 — Typst templates & localization (medium)
-- Add starter templates in `templates/starter/`.
-- Implement manifest-driven typst generation that supports UI localization (en/da).
-- Ensure `locale` column is read if present and preserved in frontmatter.
-- Files: `src/typst.rs`, new `templates/` directory.
+Priority 3 — Typst templates & manifest-driven generation (medium)
+- Add starter templates under `templates/starter/` and update `src/typst.rs` to generate typst by reading `output/manifest.json` and per-abstract frontmatter.
+- Support UI localization (en/da) for labels in the template.
+- Keep PDF rendering optional; when not running, print exact `typst compile` commands the user can run.
+- Files to add/change: `templates/starter/`, `src/typst.rs`.
 - Estimate: 2–4 hours.
 
-Priority 5 — Tests and fixtures (remaining)
-- Add fixture workbooks (5–10 rows) under `data/fixtures/` for integration tests.
-- Add any remaining unit tests for parsing shapes as needed.
-- Files: `tests/`, `data/fixtures/`.
+Priority 4 — Tests and fixtures (remaining)
+- Add small fixture workbooks (`data/fixtures/`) with 5–10 rows that exercise: duplicate IDs, missing refs, locale column, duplicate titles to trigger slug suffixing, and session grouping.
+- Add unit tests for `parse_abstracts_from_rows`, header detection, and dry-run plan output.
+- Files to add: `tests/`, `data/fixtures/`.
 - Estimate: 2–3 hours.
 
-Priority 6 — CLI and UX polish (low)
-- Improve exit codes on validation failures.
-- Revise logging; add `--verbose` behaviour if needed.
-- Consider `render-typst` and `watch` subcommands as follow-ups.
+Priority 5 — CLI and UX polish (low)
+- Improve exit codes for validation/build failures and use `--verbose` to increase logging detail.
+- Consider additional subcommands (`render-typst`, `watch`) as follow-ups.
 - Files: `src/cli.rs`, `src/log.rs`.
 - Estimate: 1–2 hours.
 
-Deliverables for Phase 1
-- Strict validation and `validate` command working.
-- `build` with `--dry-run` plan output.
-- Markdown files written following slug/collision rules and `manifest.json`.
-- Starter typst files emitted; PDF rendering still optional (requires local `typst`).
+Deliverables for Phase 1 (updated)
+- Validation and `validate` command already present and working.
+- `build` with a proper `--dry-run` plan output (to implement next).
+- Markdown files written following slug/collision rules and `manifest.json` (already present).
+- Starter typst templates + manifest-driven `.typ` files emitted; PDF rendering optional.
 
 Suggested small milestones (apply sequentially)
-1) Implement strict validation and `validate` command.
-2) Fix dry-run semantics and implement planning output.
-3) Add slug collision handling and adjust markdown writer.
-4) Add starter typst templates and improve `emit_typst`.
-5) Add unit tests and fixtures.
+1) Implement dry-run planning output and wire `--dry-run` to print the plan (no writes).
+2) Read `locale` from input and ensure it flows through to frontmatter and typst generation.
+3) Add starter typst templates and improve `emit_typst` to use the manifest and templates.
+4) Add fixtures and tests covering parsing, validation failures, slug collisions, and dry-run.
 
 Suggested commit message
-- "feat: enforce strict validation, add implementation TODO, update spec README"
+- "feat: add dry-run planning, detect locale column, improve typst plumbing"
 
-Notes
-- I will not change existing files that the repo owner has modified elsewhere; edits are limited to spec files and code paths described above.
-- After you approve I can apply the patch (create the TODO file, delete `spec/08-todo-next-steps.md`, update `spec/README.md`) and run `cargo test` / `cargo run` as requested.
-
-Files to be created/changed
-- Add: `spec/08-implementation-todo.md`
-- Delete: `spec/08-todo-next-steps.md` (already removed)
-- Update: `spec/README.md` (replace reference to `IMPLEMENTATION_TODO.md`)
+Files likely to change
+- Update: `src/io/mod.rs`, `src/io/markdown.rs`, `src/io/excel.rs`, `src/typst.rs`, `src/validation.rs` (minor), `src/cli.rs` (minor)
+- Add: `templates/starter/`, `data/fixtures/`, `tests/`

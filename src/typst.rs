@@ -115,10 +115,10 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
                 for (fm, body) in abs_sorted {
-                    // create a safe anchor id from fm.id
-                    let anchor_id = fm.id.replace(' ', "-").to_lowercase();
-                    // add anchor + heading
-                    gen.push_str(&format!("anchor({})\n## {}\n", anchor_id, fm.title));
+                    // add heading (avoid injecting template macros like `anchor()` which
+                    // have varied syntax across Typst versions). Keep headings plain to
+                    // ensure the generated .typ is syntactically valid.
+                    gen.push_str(&format!("## {}\n", fm.title));
                     // add authors/affiliation
                     if let Some(auths) = &fm.authors {
                         gen.push_str(&format!("{}: {}\n", labels.get("authors_label").unwrap(), auths.join(", ")));
@@ -128,8 +128,8 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                     }
                     gen.push_str(&format!("\n{}\n", body));
 
-                    // add TOC entry linking to anchor
-                    toc.push_str(&format!("- link(#{}){{{}}}\n", anchor_id, fm.title));
+                    // add a plain TOC entry (no internal links for compatibility)
+                    toc.push_str(&format!("- {}\n", fm.title));
                 }
             }
         } else {
@@ -161,18 +161,11 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                     s.dedup();
                     s
                 };
-                // include a simple anchor reference per title (use id-based anchors)
-                let links: Vec<String> = uniq
-                    .iter()
-                    .map(|t| {
-                        // best-effort: slugify the title for link reference
-                        let a = t.replace(' ', "-").to_lowercase();
-                        format!("link(#{}){{{}}}", a, t)
-                    })
-                    .collect();
-                gen.push_str(&format!("- {}: {}\n", k, links.join("; ")));
+                    // emit titles for each keyword (no internal links)
+                    let links: Vec<String> = uniq.iter().cloned().collect();
+                    gen.push_str(&format!("- {}: {}\n", k, links.join("; ")));
+                }
             }
-        }
 
         // Build a minimal validated Typst document to avoid template/comment
         // interpolation issues. This produces consistent output and is easy

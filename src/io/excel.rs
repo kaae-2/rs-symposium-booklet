@@ -19,7 +19,7 @@ fn as_str(cell: Option<&DataType>) -> String {
     }
 }
 
-fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
+pub fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
     for (i, row) in rows.iter().take(12).enumerate() {
         let lowered: Vec<String> = row.iter().map(|c| c.to_lowercase()).collect();
         let mut has_id = false;
@@ -41,6 +41,138 @@ fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usiz
         }
     }
     None
+}
+
+// Extract parsing of abstracts from a rows buffer into a helper so tests can exercise
+// duplicate-id handling and header-detection without needing actual workbook files.
+pub fn parse_abstracts_from_rows(
+    rows_a: &[Vec<String>],
+    header_idx: usize,
+) -> Result<HashMap<String, Abstract>> {
+    let header_row = &rows_a[header_idx];
+    let lower_row: Vec<String> = header_row.iter().map(|s| s.to_lowercase()).collect();
+    let find_col = |subs: &[&str]| -> Option<usize> {
+        for (j, cell) in lower_row.iter().enumerate() {
+            for &s in subs {
+                if cell.contains(&s.to_lowercase()) {
+                    return Some(j);
+                }
+            }
+        }
+        None
+    };
+
+    let col_id = find_col(&["id"]).ok_or_else(|| anyhow!("id column not found in abstracts"))?;
+    let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
+    let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
+    let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
+    let col_aff = find_col(&["affiliation", "hospital", "afdeling"]).unwrap_or(col_authors + 1);
+    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"]).unwrap_or(col_abstract + 1);
+    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"]).unwrap_or(col_keywords + 1);
+    let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
+    let col_literature = find_col(&["litterature", "literature", "references", "literatur"]).unwrap_or(col_reference + 1);
+    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
+    let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
+
+    let mut abstracts: Vec<Abstract> = Vec::new();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+
+    for (ridx, row) in rows_a.iter().enumerate().skip(header_idx + 1) {
+        if row.iter().all(|c| c.trim().is_empty()) {
+            continue;
+        }
+        let aid = row
+            .get(col_id)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let title = row
+            .get(col_title)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let authors = row
+            .get(col_authors)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let abstract_text = row
+            .get(col_abstract)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let affiliation = row
+            .get(col_aff)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let keywords = row
+            .get(col_keywords)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let take_home = row
+            .get(col_takehome)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let reference = row
+            .get(col_reference)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let literature = row
+            .get(col_literature)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let center = row
+            .get(col_center)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let contact = row
+            .get(col_contact)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        if aid.is_empty() && title.is_empty() && abstract_text.is_empty() {
+            continue;
+        }
+
+        if !aid.is_empty() {
+            if seen.contains_key(&aid) {
+                return Err(anyhow!("Duplicate abstract id found: {} at row {}", aid, ridx + 1));
+            }
+            seen.insert(aid.clone(), ridx + 1);
+        }
+
+        let authors_vec = authors
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let keywords_vec = keywords
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        abstracts.push(Abstract {
+            id: aid.clone(),
+            title: title.clone(),
+            authors: authors_vec,
+            affiliation,
+            center,
+            contact_email: contact,
+            abstract_text: abstract_text.clone(),
+            keywords: keywords_vec,
+            take_home,
+            reference,
+            literature,
+            locale: "da".to_string(),
+        });
+    }
+
+    // build id map
+    let mut abstract_map: HashMap<String, Abstract> = HashMap::new();
+    for a in abstracts.into_iter() {
+        if !a.id.is_empty() {
+            abstract_map.insert(a.id.clone(), a);
+        }
+    }
+
+    Ok(abstract_map)
 }
 
 fn find_sheet_by_substr(path: &str, subs: &[&str]) -> Result<String> {

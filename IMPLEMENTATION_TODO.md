@@ -29,11 +29,10 @@ Priority 4 — Typst templates & localization (medium)
 - Files: `src/typst.rs`, new `templates/` directory.
 - Estimate: 2–4 hours.
 
-Priority 5 — Tests and fixtures (low → medium)
-- Add unit tests for header detection, parsing shapes, and slug collision behavior.
-- Add fixture workbooks (5–10 rows) under `data/fixtures/`.
-- Files: `tests/`, `data/fixtures/`.
-- Estimate: 2–3 hours.
+Priority 5 — Tests and fixtures (some done)
+- Added unit tests for header detection and duplicate-id handling under `tests/validation_tests.rs`.
+- Still to add: fixture Excel workbooks under `data/fixtures/` and tests for slug collision behavior.
+- Files changed: `tests/validation_tests.rs`, `src/io/excel.rs` (test helpers).
 
 Priority 6 — CLI and UX polish (low)
 - Improve exit codes on validation failures.

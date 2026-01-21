@@ -1,9 +1,9 @@
 mod cli;
 mod io;
-mod model;
-mod validation;
-mod typst;
 mod log;
+mod model;
+mod typst;
+mod validation;
 
 use anyhow::Result;
 use clap::Parser;
@@ -13,11 +13,7 @@ fn main() -> Result<()> {
     log::init()?;
     let cli = Cli::parse();
     match cli.command {
-        cli::Commands::Build(opts) => {
-            crate::io::run_build(opts)
-        }
-        cli::Commands::Validate { input } => {
-            crate::validation::validate_input(&input)
-        }
+        cli::Commands::Build(opts) => crate::io::run_build(opts),
+        cli::Commands::Validate { input } => crate::validation::validate_input(&input),
     }
 }

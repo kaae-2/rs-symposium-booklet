@@ -8,7 +8,11 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
     let typst_dir = Path::new(outdir).join("typst");
     create_dir_all(&typst_dir)?;
 
-    for locale in locales_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+    for locale in locales_csv
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
         let filename = format!("book_{}.typ", locale);
         let path = typst_dir.join(&filename);
         let mut f = File::create(&path)?;
@@ -19,15 +23,29 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
 }
 
 pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>) -> Result<()> {
-    let bin = if let Some(p) = typst_bin { p.to_string() } else { "typst".to_string() };
+    let bin = if let Some(p) = typst_bin {
+        p.to_string()
+    } else {
+        "typst".to_string()
+    };
     // check if command exists by trying --version
     let check = Command::new(&bin).arg("--version").output();
     match check {
         Ok(o) if o.status.success() => {
-            for locale in locales_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
-                let typst_file = Path::new(outdir).join("typst").join(format!("book_{}.typ", locale));
+            for locale in locales_csv
+                .split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                let typst_file = Path::new(outdir)
+                    .join("typst")
+                    .join(format!("book_{}.typ", locale));
                 let out_pdf = Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale));
-                tracing::info!("Running typst: {} -> {}", typst_file.display(), out_pdf.display());
+                tracing::info!(
+                    "Running typst: {} -> {}",
+                    typst_file.display(),
+                    out_pdf.display()
+                );
                 let status = Command::new(&bin)
                     .arg("compile")
                     .arg(typst_file)

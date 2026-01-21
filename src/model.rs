@@ -6,8 +6,13 @@ pub struct Abstract {
     pub title: String,
     pub authors: Vec<String>,
     pub affiliation: Option<String>,
+    pub center: Option<String>,
+    pub contact_email: Option<String>,
     pub abstract_text: String,
     pub keywords: Vec<String>,
+    pub take_home: Option<String>,
+    pub reference: Option<String>,
+    pub literature: Option<String>,
     pub locale: String,
 }
 

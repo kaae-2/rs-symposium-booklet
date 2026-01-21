@@ -6,15 +6,34 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
-pub fn write_markdown(abstracts: &HashMap<String, Abstract>, sessions: &Vec<Session>, outdir: &str) -> Result<()> {
+pub fn write_markdown(
+    abstracts: &HashMap<String, Abstract>,
+    sessions: &Vec<Session>,
+    outdir: &str,
+) -> Result<()> {
     // ensure output exists
     create_dir_all(outdir)?;
 
     let mut manifest_sessions = Vec::new();
 
     for session in sessions.iter() {
-        let slug = slugify(&session.title);
-        let session_dir = Path::new(outdir).join(&slug);
+        // build a safe slug for the session directory
+        let mut slug = slugify(&session.title);
+        if slug.trim().is_empty() {
+            slug = format!("session-{}", session.order);
+        }
+        // guard characters (extra safety)
+        let slug_safe: String = slug
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .collect();
+        let session_slug = if slug_safe.is_empty() {
+            format!("session-{}", session.order)
+        } else {
+            slug_safe
+        };
+
+        let session_dir = Path::new(outdir).join(&session_slug);
         create_dir_all(&session_dir)?;
 
         // sort items by order
@@ -22,12 +41,27 @@ pub fn write_markdown(abstracts: &HashMap<String, Abstract>, sessions: &Vec<Sess
         items.sort_by_key(|i| i.order);
 
         for (idx, item) in items.iter().enumerate() {
-            let abs = abstracts.get(&item.id).ok_or_else(|| anyhow!("Referenced abstract {} not found", item.id))?;
-            let title_slug = slugify(&abs.title);
-            let filename = format!("{:04}-{}.md", idx + 1, title_slug);
-            let path = session_dir.join(&filename);
+            let abs = abstracts
+                .get(&item.id)
+                .ok_or_else(|| anyhow!("Referenced abstract {} not found", item.id))?;
+            let mut title_slug = slugify(&abs.title);
+            if title_slug.trim().is_empty() {
+                title_slug = abs.id.clone();
+            }
+            let title_safe: String = title_slug
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            let filename_base = if title_safe.is_empty() {
+                format!("{:04}", idx + 1)
+            } else {
+                format!("{:04}-{}", idx + 1, title_safe)
+            };
 
-            let mut f = File::create(&path)?;
+            let path = session_dir.join(format!("{}.md", filename_base));
+
+            let mut f = File::create(&path)
+                .map_err(|e| anyhow!("Failed to create file {}: {}", path.display(), e))?;
             // write yaml frontmatter
             writeln!(f, "---")?;
             writeln!(f, "id: \"{}\"", abs.id)?;

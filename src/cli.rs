@@ -41,6 +41,10 @@ pub struct BuildOpts {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Emit parse JSON into `output/tools_output/parse.json` and exit (no other writes)
+    #[arg(long)]
+    pub emit_parse_json: bool,
+
     /// Verbose logging
     #[arg(long)]
     pub verbose: bool,

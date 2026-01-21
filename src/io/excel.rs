@@ -1,148 +1,700 @@
-use crate::model::{Abstract, ItemRef, Manifest, Session};
+use crate::model::{Abstract, ItemRef, Session};
 use anyhow::{anyhow, Result};
-use calamine::{open_workbook_auto, DataType, RangeDeserializerBuilder, Reader};
-use std::collections::HashMap;
+use calamine::{open_workbook_auto, DataType, Reader};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
+
+fn as_str(cell: Option<&DataType>) -> String {
+    match cell {
+        None => "".to_string(),
+        Some(c) => match c {
+            DataType::Empty => "".to_string(),
+            DataType::String(s) => s.trim().to_string(),
+            DataType::Float(f) => f.to_string(),
+            DataType::Int(i) => i.to_string(),
+            DataType::Bool(b) => b.to_string(),
+            _ => format!("{}", c),
+        },
+    }
+}
+
+fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
+    for (i, row) in rows.iter().take(12).enumerate() {
+        let lowered: Vec<String> = row.iter().map(|c| c.to_lowercase()).collect();
+        let mut has_id = false;
+        let mut has_title = false;
+        for cell in lowered.iter() {
+            if cell.contains("id") {
+                has_id = true;
+            }
+            if cell.contains("title")
+                || cell.contains("titel")
+                || cell.contains("abstract")
+                || cell.contains("resum")
+            {
+                has_title = true;
+            }
+        }
+        if has_id && has_title {
+            return Some(i);
+        }
+    }
+    None
+}
+
+fn find_sheet_by_substr(path: &str, subs: &[&str]) -> Result<String> {
+    let mut wb = open_workbook_auto(path).map_err(|e| anyhow!("open failed: {}", e))?;
+    for name in wb.sheet_names() {
+        let low = name.to_lowercase();
+        for &s in subs {
+            if low.contains(&s.to_lowercase()) {
+                return Ok(name.clone());
+            }
+        }
+    }
+    // fallback to first sheet
+    Ok(wb
+        .sheet_names()
+        .get(0)
+        .cloned()
+        .ok_or_else(|| anyhow!("no sheets in workbook {}", path))?)
+}
 
 pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Session>)> {
+    // if `path` is a directory, find two xlsx files and parse accordingly
+    if Path::new(path).is_dir() {
+        let mut xls = Vec::new();
+        for entry in fs::read_dir(path)? {
+            let e = entry?;
+            let p = e.path();
+            if let Some(ext) = p.extension() {
+                if ext == "xlsx" {
+                    if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
+                        if fname.starts_with("~$") {
+                            continue;
+                        }
+                    }
+                    xls.push(p.to_string_lossy().to_string());
+                }
+            }
+        }
+        if xls.is_empty() {
+            return Err(anyhow!("No .xlsx files found in directory {}", path));
+        }
+        // prefer with_ids.xlsx as abstracts file
+        let mut file_a = None::<String>;
+        let mut file_b = None::<String>;
+        for f in &xls {
+            if f.to_lowercase().contains("with_ids") || f.to_lowercase().contains("afsluttede") {
+                file_a = Some(f.clone());
+            }
+            if f.to_lowercase().contains("kopi")
+                || f.to_lowercase().contains("grupper")
+                || f.to_lowercase().contains("final")
+            {
+                file_b = Some(f.clone());
+            }
+        }
+        if file_a.is_none() {
+            file_a = xls.get(0).cloned();
+        }
+        if file_b.is_none() {
+            if xls.len() > 1 {
+                file_b = xls.get(1).cloned();
+            } else {
+                file_b = file_a.clone();
+            }
+        }
+        let file_a = file_a.ok_or_else(|| anyhow!("failed to choose abstracts file"))?;
+        let file_b = file_b.ok_or_else(|| anyhow!("failed to choose grouping file"))?;
+
+        // now parse abstracts from file_a and sessions from file_b
+        return parse_two_workbooks(&file_a, &file_b);
+    }
+
+    // existing single-workbook logic (both sheets in one workbook)
     let mut wb = open_workbook_auto(path).map_err(|e| anyhow!("Failed to open workbook: {}", e))?;
 
-    // heuristics: look for a sheet named "abstracts" and one named "sessions" (case-insensitive)
-    let mut abstracts_map = HashMap::new();
-    let mut sessions: Vec<Session> = Vec::new();
+    // identify candidate sheet names
+    let names = wb.sheet_names().to_owned();
+    if names.is_empty() {
+        return Err(anyhow!("Workbook has no sheets"));
+    }
 
-    // parse abstracts sheet
-    let sheet_names = wb.sheet_names().to_owned();
-    let mut abstracts_sheet = None;
-    let mut sessions_sheet = None;
-    for name in sheet_names {
-        let low = name.to_lowercase();
-        if low.contains("abstract") {
-            abstracts_sheet = Some(name.clone());
+    // heuristics for abstracts/session sheets (case-insensitive)
+    let mut abstracts_sheet: Option<String> = None;
+    let mut sessions_sheet: Option<String> = None;
+    for n in &names {
+        let low = n.to_lowercase();
+        if abstracts_sheet.is_none()
+            && (low.contains("afsluttede")
+                || low.contains("abstract")
+                || low.contains("afsluttet")
+                || low.contains("resum"))
+        {
+            abstracts_sheet = Some(n.clone());
         }
-        if low.contains("session") || low.contains("include") || low.contains("inclusion") {
-            sessions_sheet = Some(name.clone());
+        if sessions_sheet.is_none()
+            && (low.contains("gruppering")
+                || low.contains("grupper")
+                || low.contains("poster")
+                || low.contains("session")
+                || low.contains("include"))
+        {
+            sessions_sheet = Some(n.clone());
         }
     }
 
-    let abstracts_sheet = abstracts_sheet.ok_or_else(|| anyhow!("No abstracts sheet found"))?;
-    let sessions_sheet = sessions_sheet.ok_or_else(|| anyhow!("No sessions/include sheet found"))?;
+    let abstracts_sheet = abstracts_sheet.ok_or_else(|| {
+        anyhow!("No abstracts sheet found (tried matching 'afsluttede','abstract','resum')")
+    })?;
+    let sessions_sheet = sessions_sheet.ok_or_else(|| anyhow!("No sessions/include sheet found (tried matching 'gruppering','poster','session','include')"))?;
 
     tracing::info!("Parsing abstracts sheet: {}", abstracts_sheet);
-    if let Some(Ok(range)) = wb.worksheet_range(&abstracts_sheet) {
-        let mut rows = range.rows();
-        let headers: Vec<String> = rows
-            .next()
-            .ok_or_else(|| anyhow!("Abstracts sheet is empty"))?
-            .iter()
-            .map(|c| c.to_string())
+
+    // load rows for abstracts sheet
+    let range = wb
+        .worksheet_range(&abstracts_sheet)
+        .ok_or_else(|| anyhow!("Failed to get range for sheet {}", abstracts_sheet))??;
+    let mut rows_a: Vec<Vec<String>> = Vec::new();
+    for r in range.rows() {
+        rows_a.push(r.iter().map(|c| as_str(Some(c))).collect());
+    }
+
+    // detect header row
+    let header_idx = find_header_row(&rows_a, &[])
+        .ok_or_else(|| anyhow!("Could not detect header row in abstracts sheet"))?;
+    let header_row = &rows_a[header_idx];
+    let lower_row: Vec<String> = header_row.iter().map(|s| s.to_lowercase()).collect();
+    let find_col = |subs: &[&str]| -> Option<usize> {
+        for (j, cell) in lower_row.iter().enumerate() {
+            for &s in subs {
+                if cell.contains(&s.to_lowercase()) {
+                    return Some(j);
+                }
+            }
+        }
+        None
+    };
+
+    let col_id = find_col(&["id"]).ok_or_else(|| anyhow!("id column not found in abstracts"))?;
+    let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
+    let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
+    let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
+    let col_aff = find_col(&["affiliation", "hospital", "afdeling"]).unwrap_or(col_authors + 1);
+    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
+        .unwrap_or(col_abstract + 1);
+    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"])
+        .unwrap_or(col_keywords + 1);
+    let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
+    let col_literature = find_col(&["litterature", "literature", "references", "literatur"])
+        .unwrap_or(col_reference + 1);
+    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
+    let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
+
+    let mut abstracts: Vec<Abstract> = Vec::new();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+
+    for (ridx, row) in rows_a.iter().enumerate().skip(header_idx + 1) {
+        if row.iter().all(|c| c.trim().is_empty()) {
+            continue;
+        }
+        let aid = row
+            .get(col_id)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let title = row
+            .get(col_title)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let authors = row
+            .get(col_authors)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let abstract_text = row
+            .get(col_abstract)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let affiliation = row
+            .get(col_aff)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let keywords = row
+            .get(col_keywords)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let take_home = row
+            .get(col_takehome)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let reference = row
+            .get(col_reference)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let literature = row
+            .get(col_literature)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let center = row
+            .get(col_center)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let contact = row
+            .get(col_contact)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        if aid.is_empty() && title.is_empty() && abstract_text.is_empty() {
+            continue;
+        }
+
+        if !aid.is_empty() {
+            if seen.contains_key(&aid) {
+                tracing::warn!("Duplicate abstract id found: {} at row {}", aid, ridx + 1);
+            }
+            seen.insert(aid.clone(), ridx + 1);
+        }
+
+        let authors_vec = authors
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let keywords_vec = keywords
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .collect();
 
-        // expected headers: id,title,authors,affiliation,abstract,keywords,locale
-        for (ridx, row) in rows.enumerate() {
-            // map columns by header index
-            let mut map = HashMap::new();
-            for (cidx, cell) in row.iter().enumerate() {
-                map.insert(headers[cidx].to_lowercase(), cell.clone());
-            }
+        abstracts.push(Abstract {
+            id: aid.clone(),
+            title: title.clone(),
+            authors: authors_vec,
+            affiliation,
+            center,
+            contact_email: contact,
+            abstract_text: abstract_text.clone(),
+            keywords: keywords_vec,
+            take_home,
+            reference,
+            literature,
+            locale: "da".to_string(),
+        });
+    }
 
-            let id = cell_to_string(map.get("id")).ok_or_else(|| anyhow!("Missing id at row {}", ridx + 2))?;
-            let title = cell_to_string(map.get("title")).ok_or_else(|| anyhow!("Missing title at row {}", ridx + 2))?;
-            let authors = cell_to_string(map.get("authors")).unwrap_or_default();
-            let affiliation = cell_to_string(map.get("affiliation"));
-            let abstract_text = cell_to_string(map.get("abstract")).ok_or_else(|| anyhow!("Missing abstract at row {}", ridx + 2))?;
-            let keywords = cell_to_string(map.get("keywords")).unwrap_or_default();
-            let locale = cell_to_string(map.get("locale")).unwrap_or_else(|| "da".to_string());
-
-            let abstract = Abstract {
-                id: id.clone(),
-                title: title.clone(),
-                authors: authors.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-                affiliation: affiliation,
-                abstract_text,
-                keywords: keywords.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
-                locale,
-            };
-            if abstracts_map.insert(id.clone(), abstract).is_some() {
-                return Err(anyhow!("Duplicate abstract id {}", id));
-            }
+    // build id map
+    let mut abstract_map: HashMap<String, Abstract> = HashMap::new();
+    for a in abstracts.into_iter() {
+        if !a.id.is_empty() {
+            abstract_map.insert(a.id.clone(), a);
         }
     }
 
+    // parse sessions sheet using flexible heuristics (header rows vs item rows)
     tracing::info!("Parsing sessions sheet: {}", sessions_sheet);
-    if let Some(Ok(range)) = wb.worksheet_range(&sessions_sheet) {
-        let mut rows = range.rows();
-        let headers: Vec<String> = rows
-            .next()
-            .ok_or_else(|| anyhow!("Sessions sheet is empty"))?
-            .iter()
-            .map(|c| c.to_string())
-            .collect();
+    let range_b = wb
+        .worksheet_range(&sessions_sheet)
+        .ok_or_else(|| anyhow!("Failed to get range for sheet {}", sessions_sheet))??;
+    let mut rows_b: Vec<Vec<String>> = Vec::new();
+    for r in range_b.rows() {
+        rows_b.push(r.iter().map(|c| as_str(Some(c))).collect());
+    }
 
-        // detect shape: if headers contain abstract_id -> shape 2, else shape 1
-        let headers_l = headers.iter().map(|h| h.to_lowercase()).collect::<Vec<_>>();
-        let shape2 = headers_l.contains(&"abstract_id".to_string()) || headers_l.contains(&"abstract".to_string());
+    // try to detect a header row (first non-empty row with 'id' or 'abstract')
+    let mut sessions: Vec<Session> = Vec::new();
+    let mut current_session_title = None::<String>;
+    let mut current_items: Vec<ItemRef> = Vec::new();
+    let mut item_counter = 1u32;
 
-        if shape2 {
-            for (ridx, row) in rows.enumerate() {
-                let mut map = HashMap::new();
-                for (cidx, cell) in row.iter().enumerate() {
-                    map.insert(headers[cidx].to_lowercase(), cell.clone());
-                }
-                let aid = cell_to_string(map.get("abstract_id")).or_else(|| cell_to_string(map.get("abstract"))).ok_or_else(|| anyhow!("Missing abstract_id at row {}", ridx + 2))?;
-                let sid = cell_to_string(map.get("session_id")).unwrap_or_else(|| "default".to_string());
-                let stitle = cell_to_string(map.get("session_title")).unwrap_or_else(|| "Session".to_string());
-                let order = cell_to_u32(map.get("session_order")).unwrap_or(0);
-                let item_order = cell_to_u32(map.get("item_order")).unwrap_or(0);
+    // helper to flush current session
+    let mut flush_session = |sessions: &mut Vec<Session>,
+                             title: Option<String>,
+                             items: &mut Vec<ItemRef>,
+                             _counter_base: u32| {
+        if items.is_empty() {
+            return;
+        }
+        let title = title.unwrap_or_else(|| "(unnamed)".to_string());
+        let sid = title.clone();
+        let order = sessions.len() as u32 + 1;
+        sessions.push(Session {
+            id: sid,
+            title,
+            order,
+            items: items.drain(..).collect(),
+        });
+    };
 
-                // find or create session
-                let mut session = sessions.iter_mut().find(|s| s.id == sid).cloned();
-                if session.is_none() {
-                    sessions.push(Session { id: sid.clone(), title: stitle.clone(), order, items: Vec::new() });
+    for (_ridx, row) in rows_b.iter().enumerate() {
+        if row.iter().all(|c| c.trim().is_empty()) {
+            continue;
+        }
+        // try to find any token that looks like an abstract id present in abstract_map
+        let mut found_ids: Vec<String> = Vec::new();
+        for c in row.iter() {
+            if c.trim().is_empty() {
+                continue;
+            }
+            let token = c.trim();
+            if abstract_map.contains_key(token) {
+                found_ids.push(token.to_string());
+                continue;
+            }
+            for part in token.replace(';', ",").split(',').map(|s| s.trim()) {
+                if abstract_map.contains_key(part) {
+                    found_ids.push(part.to_string());
                 }
-                // push itemref
-                if let Some(s) = sessions.iter_mut().find(|s| s.id == sid) {
-                    s.items.push(ItemRef { id: aid.clone(), order: item_order });
-                }
+            }
+        }
+
+        if !found_ids.is_empty() {
+            // this row contains item(s)
+            if current_session_title.is_none() {
+                current_session_title = Some("(unnamed)".to_string());
+            }
+            for fid in found_ids.into_iter() {
+                current_items.push(ItemRef {
+                    id: fid,
+                    order: item_counter,
+                });
+                item_counter += 1;
             }
         } else {
-            // shape1: one row per session with abstract_ids list
-            for (ridx, row) in rows.enumerate() {
-                let mut map = HashMap::new();
-                for (cidx, cell) in row.iter().enumerate() {
-                    map.insert(headers[cidx].to_lowercase(), cell.clone());
-                }
-                let sid = cell_to_string(map.get("session_id")).or_else(|| cell_to_string(map.get("id"))).unwrap_or_else(|| format!("s_{}", ridx + 1));
-                let stitle = cell_to_string(map.get("session_title")).or_else(|| cell_to_string(map.get("title"))).unwrap_or_else(|| format!("Session {}", ridx + 1));
-                let order = cell_to_u32(map.get("session_order")).unwrap_or(ridx as u32 + 1);
-                let aids = cell_to_string(map.get("abstract_ids")).unwrap_or_default();
-                let mut items = Vec::new();
-                for (i, aid) in aids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).enumerate() {
-                    items.push(ItemRef { id: aid.to_string(), order: i as u32 + 1 });
-                }
-                sessions.push(Session { id: sid, title: stitle, order, items });
-            }
+            // treat as session header
+            // flush previous
+            flush_session(
+                &mut sessions,
+                current_session_title.take(),
+                &mut current_items,
+                1,
+            );
+            // set new title
+            let textcells: Vec<String> = row
+                .iter()
+                .filter(|c| !c.trim().is_empty())
+                .cloned()
+                .collect();
+            let title = textcells.join(" ").trim().to_string();
+            current_session_title = Some(if title.is_empty() {
+                "(unnamed)".to_string()
+            } else {
+                title
+            });
+            item_counter = 1;
+        }
+    }
+    // flush last
+    flush_session(
+        &mut sessions,
+        current_session_title.take(),
+        &mut current_items,
+        1,
+    );
+
+    // determine referenced set
+    let mut referenced: HashSet<String> = HashSet::new();
+    for s in &sessions {
+        for it in &s.items {
+            referenced.insert(it.id.clone());
         }
     }
 
-    Ok((abstracts_map, sessions))
+    // add unreferenced abstracts into an 'Unassigned' session (soft handling)
+    let mut unassigned_items: Vec<ItemRef> = Vec::new();
+    for (id, _a) in &abstract_map {
+        if !referenced.contains(id) {
+            unassigned_items.push(ItemRef {
+                id: id.clone(),
+                order: unassigned_items.len() as u32 + 1,
+            });
+        }
+    }
+    if !unassigned_items.is_empty() {
+        let order = sessions.len() as u32 + 1;
+        sessions.push(Session {
+            id: "unassigned".to_string(),
+            title: "Unassigned".to_string(),
+            order,
+            items: unassigned_items,
+        });
+    }
+
+    Ok((abstract_map, sessions))
 }
 
-fn cell_to_string(c: Option<&DataType>) -> Option<String> {
-    c.map(|cell| match cell {
-        DataType::Empty => "".to_string(),
-        DataType::String(s) => s.clone(),
-        DataType::Float(f) => f.to_string(),
-        DataType::Int(i) => i.to_string(),
-        DataType::Bool(b) => b.to_string(),
-        _ => format!("{}", cell),
-    })
-}
+pub fn parse_two_workbooks(
+    file_a: &str,
+    file_b: &str,
+) -> Result<(HashMap<String, Abstract>, Vec<Session>)> {
+    tracing::info!(
+        "Parsing abstracts from {} and sessions from {}",
+        file_a,
+        file_b
+    );
+    // load rows A
+    let sheet_a = find_sheet_by_substr(file_a, &["afsluttede", "abstract"])?;
+    let range_a = open_workbook_auto(file_a)?
+        .worksheet_range(&sheet_a)
+        .ok_or_else(|| anyhow!("Failed to read sheet {} from {}", sheet_a, file_a))??;
+    let mut rows_a: Vec<Vec<String>> = Vec::new();
+    for r in range_a.rows() {
+        rows_a.push(r.iter().map(|c| as_str(Some(c))).collect());
+    }
 
-fn cell_to_u32(c: Option<&DataType>) -> Option<u32> {
-    c.and_then(|cell| match cell {
-        DataType::Int(i) => Some(*i as u32),
-        DataType::Float(f) => Some(*f as u32),
-        DataType::String(s) => s.parse::<u32>().ok(),
-        _ => None,
-    })
+    let header_idx = find_header_row(&rows_a, &[])
+        .ok_or_else(|| anyhow!("Could not detect header row in abstracts sheet"))?;
+    let header_row = &rows_a[header_idx];
+    let lower_row: Vec<String> = header_row.iter().map(|s| s.to_lowercase()).collect();
+    let find_col = |subs: &[&str]| -> Option<usize> {
+        for (j, cell) in lower_row.iter().enumerate() {
+            for &s in subs {
+                if cell.contains(&s.to_lowercase()) {
+                    return Some(j);
+                }
+            }
+        }
+        None
+    };
+
+    let col_id = find_col(&["id"]).ok_or_else(|| anyhow!("id column not found in abstracts"))?;
+    let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
+    let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
+    let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
+    let col_aff = find_col(&["affiliation", "hospital", "afdeling"]).unwrap_or(col_authors + 1);
+    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
+        .unwrap_or(col_abstract + 1);
+    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"])
+        .unwrap_or(col_keywords + 1);
+    let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
+    let col_literature = find_col(&["litterature", "literature", "references", "literatur"])
+        .unwrap_or(col_reference + 1);
+    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
+    let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
+
+    let mut abstracts: Vec<Abstract> = Vec::new();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+
+    for (ridx, row) in rows_a.iter().enumerate().skip(header_idx + 1) {
+        if row.iter().all(|c| c.trim().is_empty()) {
+            continue;
+        }
+        let aid = row
+            .get(col_id)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let title = row
+            .get(col_title)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let authors = row
+            .get(col_authors)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let abstract_text = row
+            .get(col_abstract)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let affiliation = row
+            .get(col_aff)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let keywords = row
+            .get(col_keywords)
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let take_home = row
+            .get(col_takehome)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let reference = row
+            .get(col_reference)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let literature = row
+            .get(col_literature)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let center = row
+            .get(col_center)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let contact = row
+            .get(col_contact)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        if aid.is_empty() && title.is_empty() && abstract_text.is_empty() {
+            continue;
+        }
+
+        if !aid.is_empty() {
+            if seen.contains_key(&aid) {
+                tracing::warn!("Duplicate abstract id found: {} at row {}", aid, ridx + 1);
+            }
+            seen.insert(aid.clone(), ridx + 1);
+        }
+
+        let authors_vec = authors
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let keywords_vec = keywords
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        abstracts.push(Abstract {
+            id: aid.clone(),
+            title: title.clone(),
+            authors: authors_vec,
+            affiliation,
+            center,
+            contact_email: contact,
+            abstract_text: abstract_text.clone(),
+            keywords: keywords_vec,
+            take_home,
+            reference,
+            literature,
+            locale: "da".to_string(),
+        });
+    }
+
+    // build id map
+    let mut abstract_map: HashMap<String, Abstract> = HashMap::new();
+    for a in abstracts.into_iter() {
+        if !a.id.is_empty() {
+            abstract_map.insert(a.id.clone(), a);
+        }
+    }
+
+    // load rows B
+    let sheet_b = match find_sheet_by_substr(file_b, &["gruppering", "grupper", "poster"]) {
+        Ok(s) => s,
+        Err(_) => match open_workbook_auto(file_b) {
+            Ok(mut wb) => wb
+                .sheet_names()
+                .get(0)
+                .cloned()
+                .unwrap_or_else(|| "Sheet1".to_string()),
+            Err(_) => "Sheet1".to_string(),
+        },
+    };
+    let range_b = open_workbook_auto(file_b)?
+        .worksheet_range(&sheet_b)
+        .ok_or_else(|| anyhow!("Failed to read sheet {} from {}", sheet_b, file_b))??;
+    let mut rows_b: Vec<Vec<String>> = Vec::new();
+    for r in range_b.rows() {
+        rows_b.push(r.iter().map(|c| as_str(Some(c))).collect());
+    }
+
+    // parse sessions from rows_b (same heuristics as single workbook case)
+    let mut sessions: Vec<Session> = Vec::new();
+    let mut current_session_title = None::<String>;
+    let mut current_items: Vec<ItemRef> = Vec::new();
+    let mut item_counter = 1u32;
+
+    let mut flush_session =
+        |sessions: &mut Vec<Session>, title: Option<String>, items: &mut Vec<ItemRef>| {
+            if items.is_empty() {
+                return;
+            }
+            let title = title.unwrap_or_else(|| "(unnamed)".to_string());
+            let sid = title.clone();
+            let order = sessions.len() as u32 + 1;
+            sessions.push(Session {
+                id: sid,
+                title,
+                order,
+                items: items.drain(..).collect(),
+            });
+        };
+
+    for row in rows_b.iter() {
+        if row.iter().all(|c| c.trim().is_empty()) {
+            continue;
+        }
+        let mut found_ids: Vec<String> = Vec::new();
+        for c in row.iter() {
+            if c.trim().is_empty() {
+                continue;
+            }
+            let token = c.trim();
+            if abstract_map.contains_key(token) {
+                found_ids.push(token.to_string());
+                continue;
+            }
+            for part in token.replace(';', ",").split(',').map(|s| s.trim()) {
+                if abstract_map.contains_key(part) {
+                    found_ids.push(part.to_string());
+                }
+            }
+        }
+
+        if !found_ids.is_empty() {
+            if current_session_title.is_none() {
+                current_session_title = Some("(unnamed)".to_string());
+            }
+            for fid in found_ids.into_iter() {
+                current_items.push(ItemRef {
+                    id: fid,
+                    order: item_counter,
+                });
+                item_counter += 1;
+            }
+        } else {
+            flush_session(
+                &mut sessions,
+                current_session_title.take(),
+                &mut current_items,
+            );
+            let textcells: Vec<String> = row
+                .iter()
+                .filter(|c| !c.trim().is_empty())
+                .cloned()
+                .collect();
+            let title = textcells.join(" ").trim().to_string();
+            current_session_title = Some(if title.is_empty() {
+                "(unnamed)".to_string()
+            } else {
+                title
+            });
+            item_counter = 1;
+        }
+    }
+    flush_session(
+        &mut sessions,
+        current_session_title.take(),
+        &mut current_items,
+    );
+
+    // determine referenced set and add Unassigned for unreferenced
+    let mut referenced: HashSet<String> = HashSet::new();
+    for s in &sessions {
+        for it in &s.items {
+            referenced.insert(it.id.clone());
+        }
+    }
+    let mut unassigned_items: Vec<ItemRef> = Vec::new();
+    for (id, _a) in &abstract_map {
+        if !referenced.contains(id) {
+            unassigned_items.push(ItemRef {
+                id: id.clone(),
+                order: unassigned_items.len() as u32 + 1,
+            });
+        }
+    }
+    if !unassigned_items.is_empty() {
+        let order = sessions.len() as u32 + 1;
+        sessions.push(Session {
+            id: "unassigned".to_string(),
+            title: "Unassigned".to_string(),
+            order,
+            items: unassigned_items,
+        });
+    }
+
+    Ok((abstract_map, sessions))
 }

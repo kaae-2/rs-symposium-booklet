@@ -1,1 +1,6 @@
 data/*
+output/*
+target/*
+
+out/*
+*config.toml

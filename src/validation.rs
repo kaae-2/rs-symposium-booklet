@@ -12,7 +12,11 @@ pub fn validate_refs(abstracts: &HashMap<String, Abstract>, sessions: &Vec<Sessi
     for s in sessions.iter() {
         for item in s.items.iter() {
             if !abstracts.contains_key(&item.id) {
-                return Err(anyhow!("Session {} references missing abstract id {}", s.title, item.id));
+                return Err(anyhow!(
+                    "Session {} references missing abstract id {}",
+                    s.title,
+                    item.id
+                ));
             }
         }
     }

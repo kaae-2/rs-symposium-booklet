@@ -10,8 +10,7 @@ Parts (recommended reading order)
 - `05-cli-ux.md` — CLI commands, flags, and user flow
 - `06-validation-error-handling.md` — Validation rules and error behaviour
 - `07-implementation-plan.md` — Modules, crates, and developer plan
- - `09-parsing.md` — Detailed parsing rules and parse JSON schema
- - `08-implementation-todo.md` — Concrete next implementation steps and priorities (updated — some items already implemented in codebase)
+ - `08-parsing.md` — Detailed parsing rules and parse JSON schema
 
 Spec file structure
 - spec/

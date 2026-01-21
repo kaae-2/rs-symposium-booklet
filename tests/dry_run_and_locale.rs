@@ -4,7 +4,6 @@ use symposium_booklet::io::plan::PlanAction;
 use symposium_booklet::model::{Abstract, Session, ItemRef};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 mod common;
 use common::fixtures::make_fixture;
 

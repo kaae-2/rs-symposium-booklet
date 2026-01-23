@@ -80,6 +80,38 @@ fn parse_authors_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
     (authors, affiliation)
 }
 
+fn push_session(
+    sessions: &mut Vec<Session>,
+    seen: &mut HashMap<String, u32>,
+    title: String,
+    items: &mut Vec<ItemRef>,
+) -> Result<()> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let order = sessions.len() as u32 + 1;
+    let base_id = title.clone();
+    let count = seen.entry(base_id.clone()).or_insert(0);
+    *count += 1;
+    let id = if *count == 1 {
+        base_id.clone()
+    } else {
+        format!("{}_{}", base_id, count)
+    };
+    let title = if *count == 1 {
+        title
+    } else {
+        format!("{}_{}", title, count)
+    };
+    sessions.push(Session {
+        id,
+        title,
+        order,
+        items: items.drain(..).collect(),
+    });
+    Ok(())
+}
+
 pub fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
     for (i, row) in rows.iter().take(12).enumerate() {
         let lowered: Vec<String> = row.iter().map(|c| c.to_lowercase()).collect();
@@ -492,30 +524,22 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
 
     // try to detect a header row (first non-empty row with 'id' or 'abstract')
     let mut sessions: Vec<Session> = Vec::new();
+    let mut seen_session_ids: HashMap<String, u32> = HashMap::new();
     let mut current_session_title = None::<String>;
     let mut current_items: Vec<ItemRef> = Vec::new();
     let mut item_counter = 1u32;
 
     // helper to flush current session
     let mut flush_session = |sessions: &mut Vec<Session>,
+                             seen: &mut HashMap<String, u32>,
                              title: Option<String>,
-                             items: &mut Vec<ItemRef>,
-                             _counter_base: u32| {
-        if items.is_empty() {
-            return;
-        }
+                             items: &mut Vec<ItemRef>|
+     -> Result<()> {
         let title = title.unwrap_or_else(|| "(unnamed)".to_string());
-        let sid = title.clone();
-        let order = sessions.len() as u32 + 1;
-        sessions.push(Session {
-            id: sid,
-            title,
-            order,
-            items: items.drain(..).collect(),
-        });
+        push_session(sessions, seen, title, items)
     };
 
-    for (_ridx, row) in rows_b.iter().enumerate() {
+    for row in rows_b.iter() {
         if row.iter().all(|c| c.trim().is_empty()) {
             continue;
         }
@@ -554,10 +578,10 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             // flush previous
             flush_session(
                 &mut sessions,
+                &mut seen_session_ids,
                 current_session_title.take(),
                 &mut current_items,
-                1,
-            );
+            )?;
             // set new title
             let textcells: Vec<String> = row
                 .iter()
@@ -576,10 +600,10 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
     // flush last
     flush_session(
         &mut sessions,
+        &mut seen_session_ids,
         current_session_title.take(),
         &mut current_items,
-        1,
-    );
+    )?;
 
     // determine referenced set
     let mut referenced: HashSet<String> = HashSet::new();
@@ -778,25 +802,19 @@ pub fn parse_two_workbooks(
 
     // parse sessions from rows_b (same heuristics as single workbook case)
     let mut sessions: Vec<Session> = Vec::new();
+    let mut seen_session_ids: HashMap<String, u32> = HashMap::new();
     let mut current_session_title = None::<String>;
     let mut current_items: Vec<ItemRef> = Vec::new();
     let mut item_counter = 1u32;
 
-    let mut flush_session =
-        |sessions: &mut Vec<Session>, title: Option<String>, items: &mut Vec<ItemRef>| {
-            if items.is_empty() {
-                return;
-            }
-            let title = title.unwrap_or_else(|| "(unnamed)".to_string());
-            let sid = title.clone();
-            let order = sessions.len() as u32 + 1;
-            sessions.push(Session {
-                id: sid,
-                title,
-                order,
-                items: items.drain(..).collect(),
-            });
-        };
+    let mut flush_session = |sessions: &mut Vec<Session>,
+                             seen: &mut HashMap<String, u32>,
+                             title: Option<String>,
+                             items: &mut Vec<ItemRef>|
+     -> Result<()> {
+        let title = title.unwrap_or_else(|| "(unnamed)".to_string());
+        push_session(sessions, seen, title, items)
+    };
 
     for row in rows_b.iter() {
         if row.iter().all(|c| c.trim().is_empty()) {
@@ -833,9 +851,10 @@ pub fn parse_two_workbooks(
         } else {
             flush_session(
                 &mut sessions,
+                &mut seen_session_ids,
                 current_session_title.take(),
                 &mut current_items,
-            );
+            )?;
             let textcells: Vec<String> = row
                 .iter()
                 .filter(|c| !c.trim().is_empty())
@@ -852,9 +871,10 @@ pub fn parse_two_workbooks(
     }
     flush_session(
         &mut sessions,
+        &mut seen_session_ids,
         current_session_title.take(),
         &mut current_items,
-    );
+    )?;
 
     // determine referenced set and add Unassigned for unreferenced
     let mut referenced: HashSet<String> = HashSet::new();

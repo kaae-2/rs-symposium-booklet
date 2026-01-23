@@ -2,7 +2,7 @@ use crate::model::{Abstract, ItemRef, Manifest, Session};
 use anyhow::{anyhow, Result};
 use slug::slugify;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
+use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
@@ -45,6 +45,9 @@ pub fn write_markdown(
         };
 
         let session_dir = Path::new(outdir).join(&session_slug);
+        if session_dir.exists() {
+            remove_dir_all(&session_dir)?;
+        }
         create_dir_all(&session_dir)?;
 
         // sort items by order
@@ -76,8 +79,7 @@ pub fn write_markdown(
             let mut candidate = filename_base.clone();
             let mut suffix: u32 = 0;
             loop {
-                let candidate_path = session_dir.join(format!("{}.md", candidate));
-                if !used_names.contains(&candidate) && !candidate_path.exists() {
+                if !used_names.contains(&candidate) {
                     break;
                 }
                 suffix += 1;
@@ -167,6 +169,9 @@ pub fn write_markdown_plan(
         };
 
         let session_dir = Path::new(outdir).join(&session_slug);
+        plan.push(PlanAction::DeleteDir {
+            path: session_dir.clone(),
+        });
         plan.push(PlanAction::CreateDir {
             path: session_dir.clone(),
         });
@@ -197,8 +202,7 @@ pub fn write_markdown_plan(
             let mut candidate = filename_base.clone();
             let mut suffix: u32 = 0;
             loop {
-                let candidate_path = session_dir.join(format!("{}.md", candidate));
-                if !used_names.contains(&candidate) && !candidate_path.exists() {
+                if !used_names.contains(&candidate) {
                     break;
                 }
                 suffix += 1;

@@ -3,10 +3,25 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum PlanAction {
-    CreateDir { path: PathBuf },
-    WriteFile { path: PathBuf, summary: String },
-    EmitTypst { path: PathBuf, template: String, command: Option<String> },
-    UpdateManifest { path: PathBuf, manifest_summary: String },
+    DeleteDir {
+        path: PathBuf,
+    },
+    CreateDir {
+        path: PathBuf,
+    },
+    WriteFile {
+        path: PathBuf,
+        summary: String,
+    },
+    EmitTypst {
+        path: PathBuf,
+        template: String,
+        command: Option<String>,
+    },
+    UpdateManifest {
+        path: PathBuf,
+        manifest_summary: String,
+    },
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -23,20 +38,38 @@ impl Plan {
         let mut out = String::new();
         for a in &self.actions {
             match a {
+                PlanAction::DeleteDir { path } => {
+                    out.push_str(&format!("Delete dir: {}\n", path.display()));
+                }
                 PlanAction::CreateDir { path } => {
                     out.push_str(&format!("Create dir: {}\n", path.display()));
                 }
                 PlanAction::WriteFile { path, summary } => {
                     out.push_str(&format!("Write file: {} — {}\n", path.display(), summary));
                 }
-                PlanAction::EmitTypst { path, template, command } => {
-                    out.push_str(&format!("Emit typst: {} (template {})\n", path.display(), template));
+                PlanAction::EmitTypst {
+                    path,
+                    template,
+                    command,
+                } => {
+                    out.push_str(&format!(
+                        "Emit typst: {} (template {})\n",
+                        path.display(),
+                        template
+                    ));
                     if let Some(cmd) = command {
                         out.push_str(&format!("  Command: {}\n", cmd));
                     }
                 }
-                PlanAction::UpdateManifest { path, manifest_summary } => {
-                    out.push_str(&format!("Update manifest: {} — {}\n", path.display(), manifest_summary));
+                PlanAction::UpdateManifest {
+                    path,
+                    manifest_summary,
+                } => {
+                    out.push_str(&format!(
+                        "Update manifest: {} — {}\n",
+                        path.display(),
+                        manifest_summary
+                    ));
                 }
             }
         }

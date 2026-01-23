@@ -11,6 +11,7 @@ Typography
 ----------
 - Brand font: "Mari" (custom). Usage: headings, body and navigation.
 - We recommend fallbacks: serif for body, sans for headings in templates.
+- Current template pairing: Libertinus Serif (body) + Source Sans 3 (headings).
 
 Spacing & Layout
 -----------------

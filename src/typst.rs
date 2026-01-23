@@ -132,6 +132,9 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
 
         // build generated content into a string
         let mut r#gen = String::new();
+        let mut keyword_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
+            std::collections::BTreeMap::new();
+        let mut label_state = LabelState::default();
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             let mut first_session = true;
@@ -151,7 +154,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 let abs_len = abs_sorted.len();
                 for (idx, (fm, body)) in abs_sorted.into_iter().enumerate() {
                     let abs_title = escape_typst_text(&fm.title);
-                    let abs_label = label_for_abstract(&fm);
+                    let abs_label = label_state.next(&fm);
                     r#gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
                     // add authors/affiliation
                     let mut meta_written = false;
@@ -207,6 +210,21 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                             ));
                         }
                     }
+                    if let Some(ks) = &fm.keywords {
+                        for k in ks.iter() {
+                            let normalized = k.replace(" - ", ",").replace(". ", ",");
+                            for part in normalized.split(',') {
+                                let key = part.trim().to_lowercase();
+                                if key.is_empty() {
+                                    continue;
+                                }
+                                keyword_map
+                                    .entry(key)
+                                    .or_default()
+                                    .push((fm.title.clone(), abs_label.clone()));
+                            }
+                        }
+                    }
                     if idx + 1 < abs_len {
                         r#gen.push_str("#pagebreak()\n\n");
                     }
@@ -217,32 +235,6 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 "No content for locale \"{}\".\n",
                 escape_typst_text(locale)
             ));
-        }
-
-        // build an index from keywords
-        let mut keyword_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
-            std::collections::BTreeMap::new();
-        if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
-            for (_sess_title, abstracts) in sess_list {
-                for (fm, _body) in abstracts.iter() {
-                    if let Some(ks) = &fm.keywords {
-                        for k in ks.iter() {
-                            let normalized = k.replace(" - ", ",").replace(". ", ",");
-                            for part in normalized.split(',') {
-                                let key = part.trim().to_lowercase();
-                                if key.is_empty() {
-                                    continue;
-                                }
-                                let label = label_for_abstract(fm);
-                                keyword_map
-                                    .entry(key)
-                                    .or_default()
-                                    .push((fm.title.clone(), label));
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         if !keyword_map.is_empty() {
@@ -452,6 +444,28 @@ fn label_for_abstract(fm: &FrontMatter) -> String {
         label = "abstract".to_string();
     }
     format!("abs-{}", label)
+}
+
+#[derive(Default)]
+struct LabelState {
+    used: std::collections::HashSet<String>,
+    counter: u32,
+}
+
+impl LabelState {
+    fn next(&mut self, fm: &FrontMatter) -> String {
+        let base = label_for_abstract(fm);
+        if self.used.insert(base.clone()) {
+            return base;
+        }
+        loop {
+            self.counter += 1;
+            let candidate = format!("{}-{}", base, self.counter);
+            if self.used.insert(candidate.clone()) {
+                return candidate;
+            }
+        }
+    }
 }
 
 fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {

@@ -9,7 +9,7 @@ Primary commands
 Flags and behavior
 
 - `--input` accepts a single workbook path or a directory containing `.xlsx` files. For a directory, the parser prefers `with_ids`/`afsluttede` for abstracts and `kopi`/`grupper`/`final` for sessions; otherwise it falls back to the first two files.
-- `--output` directory is created if it doesn't exist.
+- `--output` directory is wiped and recreated on `build` (dry-run reports the delete action).
 - `--template` is currently used only for reporting in dry-run plans; Typst output uses the built-in minimal template.
 - `--locales` default `en,da`.
 - `--dry-run` validates and prints planned actions + JSON plan to stdout; no files are written.

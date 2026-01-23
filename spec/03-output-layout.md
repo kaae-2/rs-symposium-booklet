@@ -7,6 +7,10 @@ Filesystem layout
 - `output/<session-slug>/NNNN-<slug>.md` — markdown files per abstract.
 - `output/symposium-2026_<locale>.pdf` — generated PDF booklets when Typst is available.
 
+Build behavior
+
+- `build` wipes the entire output directory before emitting new files; `--dry-run` includes the delete action in the plan.
+
 Markdown file convention
 
 - YAML frontmatter fields:

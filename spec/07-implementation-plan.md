@@ -21,7 +21,7 @@ Modules (file-level) — status
 
 Developer workflow
 
-- Use `cargo run -- build --input data/sheets.xlsx --output out/` to test end-to-end; Typst render depends on local `typst` binary.
+- Use `cargo run -- build --input data/sheets.xlsx --output out/` to test end-to-end; Typst render depends on local `typst` binary. The build command wipes `out/` before writing new artifacts.
 - `--dry-run` prints a human-readable plan and JSON plan to stdout.
 - `--emit-parse-json` writes `output/tools_output/parse.json` summarizing parsed abstracts & sessions.
 - Recommended next steps: run unit tests (add if missing), test build with finalized Excel files.

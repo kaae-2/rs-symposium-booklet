@@ -4,6 +4,7 @@ pub mod plan;
 
 use crate::cli::BuildOpts;
 use anyhow::Result;
+use std::path::Path;
 
 pub fn run_build(opts: BuildOpts) -> Result<()> {
     // if user passed an option to emit parse JSON, handle it here
@@ -38,6 +39,10 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
     }
 
     if opts.dry_run {
+        let outdir = Path::new(&opts.output);
+        plan.push(plan::PlanAction::DeleteDir {
+            path: outdir.to_path_buf(),
+        });
         // ask markdown writer to produce plan entries
         markdown::write_markdown_plan(&abstracts, &sessions, &opts.output, &mut plan)?;
         crate::typst::emit_typst_plan(&opts.output, &opts.locales, &opts.template, &mut plan)?;
@@ -47,6 +52,24 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
         let plan_json = serde_json::to_string_pretty(&plan)?;
         println!("PLAN JSON:\n{}", plan_json);
         return Ok(());
+    }
+
+    let outdir = Path::new(&opts.output);
+    if outdir.as_os_str().is_empty() {
+        return Err(anyhow::anyhow!("Refusing to wipe empty output directory"));
+    }
+    if outdir == Path::new(".") {
+        return Err(anyhow::anyhow!(
+            "Refusing to wipe output directory set to current working directory"
+        ));
+    }
+    if outdir.has_root() && outdir.components().count() <= 1 {
+        return Err(anyhow::anyhow!(
+            "Refusing to wipe output directory set to filesystem root"
+        ));
+    }
+    if outdir.exists() {
+        std::fs::remove_dir_all(outdir)?;
     }
 
     // write md

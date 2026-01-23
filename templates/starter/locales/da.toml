@@ -1,3 +1,5 @@
 title = "Symposium 2026"
 authors_label = "Forfattere"
 affiliation_label = "Institution"
+toc_label = "Indholdsfortegnelse"
+index_label = "Indeks"

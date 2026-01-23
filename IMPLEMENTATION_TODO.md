@@ -9,6 +9,9 @@ Concrete next work items to move the project from current prototype to spec-comp
 
 Remaining work (ordered by priority)
 
+Priority 0 — Update specs to reflect finalized Excel schema (high)
+- Update the spec files and AGENTS to remove sample/tentative wording and document the finalized sheet shape (including that only the first grouping sheet is used). (DONE)
+
 Priority 1 — Dry-run semantics and planning (high)
 - Implement `--dry-run` behavior that performs validation and emits a human-readable plan of filesystem actions without writing files. (DONE)
 - Produce a plan that lists directories to create, markdown files (path + frontmatter summary), typst files to be emitted, and the final manifest updates. (DONE)

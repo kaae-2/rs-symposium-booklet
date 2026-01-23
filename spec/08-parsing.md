@@ -13,9 +13,9 @@ Inputs
 Required headers (Abstracts sheet)
 
 - id — unique string identifier per abstract (required)
-- title — text title (required)
+- title / titel — text title (required)
 - abstract / resumé — abstract body text (required)
-- authors — author list (required)
+- authors / forfatter — author list (required)
 
 Optional headers (Abstracts sheet)
 
@@ -26,11 +26,17 @@ Optional headers (Abstracts sheet)
 - literature / references — optional free-text references
 - center — short centre code (optional)
 - contact_email — author/contact email (optional)
+- locale / sprog — optional language flag (defaults to da)
 
-Grouping sheet shapes
+Authors parsing
 
-- Shape 1 (section rows + poster rows): The sheet contains session header rows (no ids) followed by poster rows where a cell contains one or more abstract ids (comma or semicolon separated). The parser treats rows with no id tokens as session headers.
-- Shape 2 (tabular mapping): The sheet contains per-row mapping with columns such as `abstract_id`, `session_id`, `session_title`, `session_order`, `item_order`. When detected, this shape is authoritative for ordering.
+- Authors are split on `;` or `og`. Each author entry is split on commas; the first segment is treated as the author name and the last segment is treated as the affiliation source. These affiliation segments are aggregated into the `affiliation` field.
+- locale / sprog — optional language flag (defaults to da)
+
+Grouping sheet structure
+
+- The grouping workbook uses session header rows (no ids) followed by item rows where a cell contains one or more abstract ids (comma or semicolon separated). The parser treats rows with no id tokens as session headers.
+- Only the first matching grouping sheet is parsed (e.g., `gruppering på poster`); additional grouping sheets are ignored.
 
 Validation rules
 

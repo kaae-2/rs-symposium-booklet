@@ -8,14 +8,14 @@ Primary agent: OpenCode (assistant)
 
 Responsibilities
 
-- Interview & gather requirements: ask concise, targeted questions about Excel schema, localization, ordering, and branding.
+- Interview & gather requirements: ask concise, targeted questions about localization, ordering, and branding (Excel schema is finalized).
 - Produce artefacts: spec files, example manifests, starter Typst templates, scaffold Rust project files, unit tests and example outputs.
 - Implement features when asked: parse Excel sheets, validate data strictly, write Markdown files, emit Typst entry files, and call the local `typst` binary to render PDFs.
 - Log and report: provide clear validation errors, runtime warnings (e.g., when `typst` is missing), and a manifest describing exported content.
 
 Behaviour & interaction model
 
-- Ask for samples before coding parsing logic. Samples should be 5–10 rows for each sheet.
+- The Excel schema is finalized; update specs if the input sheets change.
 - Use strict validation by default: any missing required header, duplicate IDs, or unresolved references aborts before filesystem writes.
 - If `--dry-run` is used, validate and print planned actions without writing files.
 - When `typst` is not found on PATH, the agent will still emit typst files and print the exact `typst compile` command to run; it will not attempt to download or install binaries.
@@ -46,8 +46,5 @@ Communication
 
 Next steps the agent will request from you
 
-1. Provide representative Excel files (5–10 rows each) for Sheet A (abstracts) and Sheet B (inclusion / sessions). These enable final schema confirmation and coding of parsing logic.
-2. Confirm the exact column header used for hospital/affiliation extraction (e.g., `hospital`, `affiliation`, or part of `authors`).
-3. (Optional) Provide preferred fonts or accept system font fallbacks for the typst template.
-
-If you prefer, the agent can scaffold the Rust project and include fixtures and unit tests before you provide Excel samples — say “Scaffold” to start that work.
+1. Confirm preferred fonts or accept system font fallbacks for the typst template.
+2. Provide any branding constraints or additional layout requirements.

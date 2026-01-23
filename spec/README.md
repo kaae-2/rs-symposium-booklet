@@ -25,4 +25,4 @@ Spec file structure
 
 Usage
 - Review the parts and confirm or adjust any details.
-- When ready, provide representative Excel files (5–10 rows each) and we will begin implementation.
+- The Excel schema is finalized; update these spec files if the input sheets change.

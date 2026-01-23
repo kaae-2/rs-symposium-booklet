@@ -19,7 +19,7 @@ fn as_str(cell: Option<&DataType>) -> String {
     }
 }
 
-fn detect_locale(header_row: &Vec<String>, row: &Vec<String>, col_abstract: usize) -> String {
+fn detect_locale(header_row: &[String], row: &[String]) -> String {
     let mut col_locale: Option<usize> = None;
     for (j, cell) in header_row.iter().enumerate() {
         let low = cell.to_lowercase();
@@ -28,10 +28,56 @@ fn detect_locale(header_row: &Vec<String>, row: &Vec<String>, col_abstract: usiz
             break;
         }
     }
-    row.get(col_locale.unwrap_or(col_abstract + 3))
+    col_locale
+        .and_then(|idx| row.get(idx))
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "da".to_string())
+}
+
+fn normalize_author_separators(input: &str) -> String {
+    let mut normalized = input.to_string();
+    for needle in [" og ", " Og ", " OG "] {
+        normalized = normalized.replace(needle, ";");
+    }
+    normalized
+}
+
+fn parse_authors_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
+    let normalized = normalize_author_separators(input);
+    let mut authors: Vec<String> = Vec::new();
+    let mut affiliations: Vec<String> = Vec::new();
+
+    for raw in normalized.split(';') {
+        let chunk = raw.trim();
+        if chunk.is_empty() {
+            continue;
+        }
+        let parts: Vec<String> = chunk
+            .split(',')
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty())
+            .map(|p| p.to_string())
+            .collect();
+        if parts.is_empty() {
+            continue;
+        }
+        authors.push(parts[0].clone());
+        if parts.len() > 1 {
+            let affiliation = parts[parts.len() - 1].clone();
+            if !affiliation.is_empty() && !affiliations.contains(&affiliation) {
+                affiliations.push(affiliation);
+            }
+        }
+    }
+
+    let affiliation = if affiliations.is_empty() {
+        None
+    } else {
+        Some(affiliations.join("; "))
+    };
+
+    (authors, affiliation)
 }
 
 pub fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
@@ -81,22 +127,15 @@ pub fn parse_abstracts_from_rows(
     let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
     let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
     let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
-    let col_aff = find_col(&["affiliation", "hospital", "afdeling"]).unwrap_or(col_authors + 1);
-    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"]).unwrap_or(col_abstract + 1);
-    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"]).unwrap_or(col_keywords + 1);
+    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
+        .unwrap_or(col_abstract + 1);
+    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"])
+        .unwrap_or(col_keywords + 1);
     let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
-    let col_literature = find_col(&["litterature", "literature", "references", "literatur"]).unwrap_or(col_reference + 1);
-    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
+    let col_literature = find_col(&["litterature", "literature", "references", "literatur"])
+        .unwrap_or(col_reference + 1);
+    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_authors + 1);
     let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
-    // detect optional locale column (common to rows in this sheet)
-    let mut col_locale: Option<usize> = None;
-    for (j, cell) in header_row.iter().enumerate() {
-        let low = cell.to_lowercase();
-        if low.contains("locale") || low.contains("sprog") {
-            col_locale = Some(j);
-            break;
-        }
-    }
 
     let mut abstracts: Vec<Abstract> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
@@ -113,7 +152,7 @@ pub fn parse_abstracts_from_rows(
             .get(col_title)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let authors = row
+        let authors_raw = row
             .get(col_authors)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
@@ -121,10 +160,6 @@ pub fn parse_abstracts_from_rows(
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let affiliation = row
-            .get(col_aff)
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -156,22 +191,22 @@ pub fn parse_abstracts_from_rows(
 
         if !aid.is_empty() {
             if seen.contains_key(&aid) {
-                return Err(anyhow!("Duplicate abstract id found: {} at row {}", aid, ridx + 1));
+                return Err(anyhow!(
+                    "Duplicate abstract id found: {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
             }
             seen.insert(aid.clone(), ridx + 1);
         }
 
-        let authors_vec = authors
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+        let (authors_vec, affiliation) = parse_authors_and_affiliation(&authors_raw);
         let keywords_vec = keywords
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        let locale_val = detect_locale(header_row, row, col_abstract);
+        let locale_val = detect_locale(header_row, row);
 
         abstracts.push(Abstract {
             id: aid.clone(),
@@ -339,7 +374,6 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
     let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
     let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
     let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
-    let col_aff = find_col(&["affiliation", "hospital", "afdeling"]).unwrap_or(col_authors + 1);
     let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
         .unwrap_or(col_abstract + 1);
     let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"])
@@ -347,7 +381,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
     let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
     let col_literature = find_col(&["litterature", "literature", "references", "literatur"])
         .unwrap_or(col_reference + 1);
-    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
+    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_authors + 1);
     let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
 
     let mut abstracts: Vec<Abstract> = Vec::new();
@@ -365,7 +399,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             .get(col_title)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let authors = row
+        let authors_raw = row
             .get(col_authors)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
@@ -373,10 +407,6 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let affiliation = row
-            .get(col_aff)
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -408,23 +438,23 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
 
         if !aid.is_empty() {
             if seen.contains_key(&aid) {
-                return Err(anyhow!("Duplicate abstract id found: {} at row {}", aid, ridx + 1));
+                return Err(anyhow!(
+                    "Duplicate abstract id found: {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
             }
             seen.insert(aid.clone(), ridx + 1);
         }
 
-        let authors_vec = authors
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+        let (authors_vec, affiliation) = parse_authors_and_affiliation(&authors_raw);
         let keywords_vec = keywords
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
 
-        let locale_val = detect_locale(header_row, row, col_abstract);
+        let locale_val = detect_locale(header_row, row);
 
         abstracts.push(Abstract {
             id: aid.clone(),
@@ -620,7 +650,6 @@ pub fn parse_two_workbooks(
     let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
     let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
     let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
-    let col_aff = find_col(&["affiliation", "hospital", "afdeling"]).unwrap_or(col_authors + 1);
     let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
         .unwrap_or(col_abstract + 1);
     let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"])
@@ -628,7 +657,7 @@ pub fn parse_two_workbooks(
     let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
     let col_literature = find_col(&["litterature", "literature", "references", "literatur"])
         .unwrap_or(col_reference + 1);
-    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_aff + 1);
+    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_authors + 1);
     let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
 
     let mut abstracts: Vec<Abstract> = Vec::new();
@@ -646,7 +675,7 @@ pub fn parse_two_workbooks(
             .get(col_title)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let authors = row
+        let authors_raw = row
             .get(col_authors)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
@@ -654,10 +683,6 @@ pub fn parse_two_workbooks(
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let affiliation = row
-            .get(col_aff)
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -689,37 +714,23 @@ pub fn parse_two_workbooks(
 
         if !aid.is_empty() {
             if seen.contains_key(&aid) {
-                return Err(anyhow!("Duplicate abstract id found: {} at row {}", aid, ridx + 1));
+                return Err(anyhow!(
+                    "Duplicate abstract id found: {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
             }
             seen.insert(aid.clone(), ridx + 1);
         }
 
-        let authors_vec = authors
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+        let (authors_vec, affiliation) = parse_authors_and_affiliation(&authors_raw);
         let keywords_vec = keywords
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
 
-        // detect optional locale column for this workbook
-        let mut col_locale: Option<usize> = None;
-        for (j, cell) in header_row.iter().enumerate() {
-            let low = cell.to_lowercase();
-            if low.contains("locale") || low.contains("sprog") {
-                col_locale = Some(j);
-                break;
-            }
-        }
-
-        let locale_val = row
-            .get(col_locale.unwrap_or(col_abstract + 3))
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "da".to_string());
+        let locale_val = detect_locale(header_row, row);
 
         abstracts.push(Abstract {
             id: aid.clone(),

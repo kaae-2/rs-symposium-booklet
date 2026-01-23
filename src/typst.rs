@@ -27,7 +27,10 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
     // read manifest
     let mf_path = Path::new(outdir).join("manifest.json");
     if !mf_path.exists() {
-        return Err(anyhow!("manifest.json not found in output directory: {}", mf_path.display()));
+        return Err(anyhow!(
+            "manifest.json not found in output directory: {}",
+            mf_path.display()
+        ));
     }
     let mf_text = read_to_string(&mf_path)?;
     let mf: JsonValue = serde_json::from_str(&mf_text)?;
@@ -37,7 +40,11 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
 
     if let Some(sessions) = mf.get("sessions").and_then(|s| s.as_array()) {
         for sess in sessions.iter() {
-            let sess_title = sess.get("title").and_then(|t| t.as_str()).unwrap_or("").to_string();
+            let sess_title = sess
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
             let sess_slug = sess.get("slug").and_then(|s| s.as_str()).unwrap_or("");
             if sess_slug.is_empty() {
                 continue;
@@ -83,14 +90,6 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         }
     }
 
-    // for each requested locale, emit a typst file (if there is content)
-    // load template file (optional). We'll use it only if present and simple;
-    // otherwise emit a minimal, validated Typst header and append generated content.
-    let template_path = template
-        .clone()
-        .unwrap_or_else(|| "templates/starter/book.typ".to_string());
-    let template_text = std::fs::read_to_string(&template_path).unwrap_or_else(|_| "".to_string());
-
     for locale in locales_csv
         .split(',')
         .map(|s| s.trim())
@@ -101,50 +100,84 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
 
         // load localized labels from templates/starter/locales/<locale>.toml if present
         let labels = load_locale_labels(locale).unwrap_or_else(|_| default_labels());
+        let title_label = labels
+            .get("title")
+            .cloned()
+            .unwrap_or_else(|| "Symposium 2026".to_string());
+        let toc_label = labels
+            .get("toc_label")
+            .cloned()
+            .unwrap_or_else(|| "Table of contents".to_string());
+        let index_label = labels
+            .get("index_label")
+            .cloned()
+            .unwrap_or_else(|| "Index".to_string());
+        let authors_label = labels
+            .get("authors_label")
+            .cloned()
+            .unwrap_or_else(|| "Authors".to_string());
+        let affiliation_label = labels
+            .get("affiliation_label")
+            .cloned()
+            .unwrap_or_else(|| "Affiliation".to_string());
 
-        // build generated content into a string, and build a TOC with anchors
+        // build generated content into a string, and build a TOC list
         let mut gen = String::new();
-        let mut toc = String::new();
-        gen.push_str(&format!("# {}\n", labels.get("title").unwrap_or(&"Symposium 2026".to_string())));
+        let mut toc_items: Vec<String> = Vec::new();
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             for (sess_title, abstracts) in sess_list {
-                gen.push_str(&format!("\n# {}\n", sess_title));
-                toc.push_str(&format!("\n# {}\n", sess_title));
+                let sess_title_text = escape_typst_text(sess_title);
+                toc_items.push(format!("- {}", sess_title_text));
+                gen.push_str(&format!("== {}\n\n", sess_title_text));
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
                 for (fm, body) in abs_sorted {
-                    // add heading (avoid injecting template macros like `anchor()` which
-                    // have varied syntax across Typst versions). Keep headings plain to
-                    // ensure the generated .typ is syntactically valid.
-                    gen.push_str(&format!("## {}\n", fm.title));
+                    let abs_title = escape_typst_text(&fm.title);
+                    toc_items.push(format!("  - {}", abs_title));
+                    gen.push_str(&format!("=== {}\n\n", abs_title));
                     // add authors/affiliation
                     if let Some(auths) = &fm.authors {
-                        gen.push_str(&format!("{}: {}\n", labels.get("authors_label").unwrap(), auths.join(", ")));
+                        let joined = auths.join(", ");
+                        gen.push_str(&format!(
+                            "*{}*: {}\n",
+                            escape_typst_text(&authors_label),
+                            escape_typst_text(&joined)
+                        ));
                     }
                     if let Some(aff) = &fm.affiliation {
-                        gen.push_str(&format!("{}: {}\n", labels.get("affiliation_label").unwrap(), aff));
+                        gen.push_str(&format!(
+                            "*{}*: {}\n",
+                            escape_typst_text(&affiliation_label),
+                            escape_typst_text(aff)
+                        ));
                     }
-                    gen.push_str(&format!("\n{}\n", body));
-
-                    // add a plain TOC entry (no internal links for compatibility)
-                    toc.push_str(&format!("- {}\n", fm.title));
+                    let body_text = escape_typst_text(body.trim());
+                    gen.push_str("\n");
+                    gen.push_str(&body_text);
+                    gen.push_str("\n\n");
                 }
             }
         } else {
-            gen.push_str(&format!("# No content for locale '{}'.\n", locale));
+            gen.push_str(&format!(
+                "No content for locale \"{}\".\n",
+                escape_typst_text(locale)
+            ));
         }
 
-    // build an index from keywords
-    let mut keyword_map: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+        // build an index from keywords
+        let mut keyword_map: std::collections::BTreeMap<String, Vec<String>> =
+            std::collections::BTreeMap::new();
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             for (_sess_title, abstracts) in sess_list {
                 for (fm, _body) in abstracts.iter() {
                     if let Some(ks) = &fm.keywords {
                         for k in ks.iter() {
                             let key = k.trim().to_string();
-                            if key.is_empty() { continue; }
+                            if key.is_empty() {
+                                continue;
+                            }
                             keyword_map.entry(key).or_default().push(fm.title.clone());
                         }
                     }
@@ -153,7 +186,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         }
 
         if !keyword_map.is_empty() {
-            gen.push_str("\n## Index\n");
+            gen.push_str(&format!("== {}\n\n", escape_typst_text(&index_label)));
             for (k, titles) in keyword_map.iter() {
                 let uniq: Vec<String> = {
                     let mut s = titles.clone();
@@ -161,22 +194,30 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                     s.dedup();
                     s
                 };
-                    // emit titles for each keyword (no internal links)
-                    let links: Vec<String> = uniq.iter().cloned().collect();
-                    gen.push_str(&format!("- {}: {}\n", k, links.join("; ")));
-                }
+                let links: Vec<String> = uniq.iter().cloned().collect();
+                gen.push_str(&format!(
+                    "- {}: {}\n",
+                    escape_typst_text(k),
+                    escape_typst_text(&links.join("; "))
+                ));
             }
+            gen.push_str("\n");
+        }
 
         // Build a minimal validated Typst document to avoid template/comment
         // interpolation issues. This produces consistent output and is easy
         // to extend later with richer templates.
         let header = format!(
-            "set page(size: (148mm, 210mm), margin: 18mm)\nset main-font: \"serif\"\nset heading-font: \"sans\"\n\n# {}\n\n",
-            labels.get("title").unwrap_or(&"Symposium 2026".to_string())
+            "#set page(width: 148mm, height: 210mm, margin: 18mm)\n#set text(font: \"Libertinus Serif\")\n#set heading(numbering: \"1.\")\n\n= {}\n\n",
+            escape_typst_text(&title_label)
         );
 
-        let toc_section = if !toc.trim().is_empty() {
-            format!("# Table of contents\n{}\n\n", toc)
+        let toc_section = if !toc_items.is_empty() {
+            format!(
+                "== {}\n\n{}\n\n",
+                escape_typst_text(&toc_label),
+                toc_items.join("\n")
+            )
         } else {
             "".to_string()
         };
@@ -195,11 +236,26 @@ fn default_labels() -> HashMap<String, String> {
     m.insert("title".to_string(), "Symposium 2026".to_string());
     m.insert("authors_label".to_string(), "Authors".to_string());
     m.insert("affiliation_label".to_string(), "Affiliation".to_string());
+    m.insert("toc_label".to_string(), "Table of contents".to_string());
+    m.insert("index_label".to_string(), "Index".to_string());
     m
 }
 
+fn escape_typst_text(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('#', "\\#")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace('{', "\\{")
+        .replace('}', "\\}")
+}
+
 fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
-    let path = Path::new("templates").join("starter").join("locales").join(format!("{}.toml", locale));
+    let path = Path::new("templates")
+        .join("starter")
+        .join("locales")
+        .join(format!("{}.toml", locale));
     if !path.exists() {
         return Err(anyhow!("locale file not found"));
     }
@@ -215,26 +271,56 @@ fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
     if let Some(a) = v.get("affiliation_label").and_then(|s| s.as_str()) {
         m.insert("affiliation_label".to_string(), a.to_string());
     }
+    if let Some(t) = v.get("toc_label").and_then(|s| s.as_str()) {
+        m.insert("toc_label".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("index_label").and_then(|s| s.as_str()) {
+        m.insert("index_label".to_string(), t.to_string());
+    }
     Ok(m)
 }
 
 pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>) -> Result<()> {
-    let bin = if let Some(p) = typst_bin { p.to_string() } else { "typst".to_string() };
+    let bin = if let Some(p) = typst_bin {
+        p.to_string()
+    } else {
+        "typst".to_string()
+    };
     let check = Command::new(&bin).arg("--version").output();
     match check {
         Ok(o) if o.status.success() => {
-            for locale in locales_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
-                let typst_file = Path::new(outdir).join("typst").join(format!("book_{}.typ", locale));
+            for locale in locales_csv
+                .split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                let typst_file = Path::new(outdir)
+                    .join("typst")
+                    .join(format!("book_{}.typ", locale));
                 let out_pdf = Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale));
-                tracing::info!("Running typst: {} -> {}", typst_file.display(), out_pdf.display());
+                tracing::info!(
+                    "Running typst: {} -> {}",
+                    typst_file.display(),
+                    out_pdf.display()
+                );
                 // typst CLI accepts OUTPUT as a positional argument rather than `-o` in some versions
-                let status = Command::new(&bin).arg("compile").arg(typst_file).arg(out_pdf).status()?;
-                if !status.success() { return Err(anyhow!("typst failed for locale {}", locale)); }
+                let status = Command::new(&bin)
+                    .arg("compile")
+                    .arg(typst_file)
+                    .arg(out_pdf)
+                    .status()?;
+                if !status.success() {
+                    return Err(anyhow!("typst failed for locale {}", locale));
+                }
             }
             Ok(())
         }
         _ => {
-            tracing::warn!("Typst binary '{}' not found or not runnable; typst files emitted in {}/typst.", bin, outdir);
+            tracing::warn!(
+                "Typst binary '{}' not found or not runnable; typst files emitted in {}/typst.",
+                bin,
+                outdir
+            );
             tracing::warn!("To render PDFs run: typst compile <typst-file> -o <out.pdf>");
             Ok(())
         }
@@ -242,19 +328,42 @@ pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>)
 }
 
 // Emit a plan of typst files that would be generated.
-pub fn emit_typst_plan(outdir: &str, locales_csv: &str, template: &Option<String>, plan: &mut crate::io::plan::Plan) -> Result<()> {
+pub fn emit_typst_plan(
+    outdir: &str,
+    locales_csv: &str,
+    template: &Option<String>,
+    plan: &mut crate::io::plan::Plan,
+) -> Result<()> {
     use crate::io::plan::PlanAction;
     use std::path::PathBuf;
 
     let typst_dir = Path::new(outdir).join("typst");
-    plan.push(PlanAction::CreateDir { path: PathBuf::from(&typst_dir) });
+    plan.push(PlanAction::CreateDir {
+        path: PathBuf::from(&typst_dir),
+    });
 
-    for locale in locales_csv.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+    for locale in locales_csv
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
         let filename = format!("book_{}.typ", locale);
         let path = typst_dir.join(&filename);
-        let template_name = template.clone().unwrap_or_else(|| "templates/starter/book.typ".to_string());
-        let cmd = Some(format!("typst compile {} -o {}", path.display(), Path::new(outdir).join(format!("symposium-2026_{}.pdf", locale)).display()));
-        plan.push(PlanAction::EmitTypst { path: PathBuf::from(path), template: template_name, command: cmd });
+        let template_name = template
+            .clone()
+            .unwrap_or_else(|| "templates/starter/book.typ".to_string());
+        let cmd = Some(format!(
+            "typst compile {} -o {}",
+            path.display(),
+            Path::new(outdir)
+                .join(format!("symposium-2026_{}.pdf", locale))
+                .display()
+        ));
+        plan.push(PlanAction::EmitTypst {
+            path: PathBuf::from(path),
+            template: template_name,
+            command: cmd,
+        });
     }
     Ok(())
 }

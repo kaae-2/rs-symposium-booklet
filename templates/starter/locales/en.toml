@@ -1,3 +1,5 @@
 title = "Symposium 2026"
 authors_label = "Authors"
 affiliation_label = "Affiliation"
+toc_label = "Table of contents"
+index_label = "Index"

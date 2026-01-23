@@ -7,14 +7,12 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct FrontMatter {
     id: String,
     title: String,
     authors: Option<Vec<String>>,
     affiliation: Option<String>,
-    session: Option<String>,
     order: Option<u32>,
     locale: Option<String>,
     keywords: Option<Vec<String>>,
@@ -67,14 +65,14 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 }
                 let txt = read_to_string(&p)?;
                 // parse frontmatter between first two '---' lines
-                if let Some(start) = txt.find("---") {
-                    if let Some(rest) = txt[start + 3..].find("---") {
-                        let fm_text = &txt[start + 3..start + 3 + rest];
-                        let body = txt[start + 3 + rest + 3..].trim().to_string();
-                        match serde_yaml::from_str::<FrontMatter>(fm_text) {
-                            Ok(fm) => abstracts.push((fm, body)),
-                            Err(_) => continue,
-                        }
+                if let Some(start) = txt.find("---")
+                    && let Some(rest) = txt[start + 3..].find("---")
+                {
+                    let fm_text = &txt[start + 3..start + 3 + rest];
+                    let body = txt[start + 3 + rest + 3..].trim().to_string();
+                    match serde_yaml::from_str::<FrontMatter>(fm_text) {
+                        Ok(fm) => abstracts.push((fm, body)),
+                        Err(_) => continue,
                     }
                 }
             }

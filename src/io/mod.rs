@@ -2,22 +2,11 @@ pub mod excel;
 pub mod markdown;
 pub mod plan;
 
-#[allow(unused_imports)]
-pub use crate::io::plan::{Plan, PlanAction};
-#[allow(unused_imports)]
-pub use excel::{parse_two_workbooks, parse_workbook};
-
 use crate::cli::BuildOpts;
 use anyhow::Result;
 
 pub fn run_build(opts: BuildOpts) -> Result<()> {
     // if user passed an option to emit parse JSON, handle it here
-    if opts.dry_run {
-        tracing::info!("Dry run: validating input {}", opts.input);
-    } else {
-        tracing::info!("Building with input={} output={}", opts.input, opts.output);
-    }
-
     if opts.dry_run {
         tracing::info!("Dry run: validating input {}", opts.input);
     } else {
@@ -31,7 +20,7 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
     let (abstracts, sessions) = excel::parse_workbook(&opts.input)?;
 
     // In dry-run mode, collect a plan of actions instead of writing files
-    let mut plan = Plan::default();
+    let mut plan = plan::Plan::default();
 
     // If requested, emit a parse JSON and exit
     if opts.emit_parse_json {

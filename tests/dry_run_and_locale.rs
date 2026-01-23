@@ -1,17 +1,28 @@
+use assert_cmd::cargo::cargo_bin_cmd;
+use std::collections::HashMap;
+use std::fs;
 use symposium_booklet::io::excel::parse_abstracts_from_rows;
 use symposium_booklet::io::markdown::write_markdown_plan;
 use symposium_booklet::io::plan::PlanAction;
-use symposium_booklet::model::{Abstract, Session, ItemRef};
-use std::collections::HashMap;
-use std::fs;
+use symposium_booklet::model::{Abstract, ItemRef, Session};
 mod common;
 use common::fixtures::make_fixture;
 
 #[test]
 fn parse_rows_detects_locale_column() {
     let rows = vec![
-        vec!["id".to_string(), "title".to_string(), "locale".to_string(), "abstract".to_string()],
-        vec!["a1".to_string(), "Title 1".to_string(), "en".to_string(), "Text 1".to_string()],
+        vec![
+            "id".to_string(),
+            "title".to_string(),
+            "locale".to_string(),
+            "abstract".to_string(),
+        ],
+        vec![
+            "a1".to_string(),
+            "Title 1".to_string(),
+            "en".to_string(),
+            "Text 1".to_string(),
+        ],
     ];
     let header_idx = 0usize;
     let map = parse_abstracts_from_rows(&rows, header_idx).expect("parse should succeed");
@@ -43,7 +54,10 @@ fn write_markdown_plan_includes_locale_and_paths() {
         id: "s1".to_string(),
         title: "Session 1".to_string(),
         order: 1,
-        items: vec![ItemRef { id: "a1".to_string(), order: 1 }],
+        items: vec![ItemRef {
+            id: "a1".to_string(),
+            order: 1,
+        }],
     };
     let mut plan = symposium_booklet::io::plan::Plan::default();
     write_markdown_plan(&abstracts, &vec![session], "outdir", &mut plan).unwrap();
@@ -57,7 +71,10 @@ fn write_markdown_plan_includes_locale_and_paths() {
             }
         }
     }
-    assert!(found, "expected a WriteFile plan entry mentioning locale:en");
+    assert!(
+        found,
+        "expected a WriteFile plan entry mentioning locale:en"
+    );
 }
 
 #[test]
@@ -71,7 +88,7 @@ fn integration_fixture_runs_binary_dry_run() {
     let out = "target/test-dry-run-int";
     let _ = fs::remove_dir_all(out);
 
-    let mut cmd = assert_cmd::Command::cargo_bin("symposium-booklet").unwrap();
+    let mut cmd = cargo_bin_cmd!("symposium-booklet");
     cmd.args(["build", "--input", &xlsx_path, "--output", out, "--dry-run"]);
     let assert = cmd.assert().success();
     let outstr = String::from_utf8(assert.get_output().stdout.clone()).unwrap_or_default();

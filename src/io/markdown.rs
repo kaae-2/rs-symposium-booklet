@@ -2,7 +2,7 @@ use crate::model::{Abstract, Session};
 use anyhow::{anyhow, Result};
 use slug::slugify;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, remove_dir_all, File};
+use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
@@ -45,9 +45,6 @@ pub fn write_markdown(
         };
 
         let session_dir = Path::new(outdir).join(&session_slug);
-        if session_dir.exists() {
-            remove_dir_all(&session_dir)?;
-        }
         create_dir_all(&session_dir)?;
 
         // sort items by order
@@ -55,6 +52,16 @@ pub fn write_markdown(
         items.sort_by_key(|i| i.order);
 
         let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in std::fs::read_dir(&session_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("md") {
+                continue;
+            }
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                used_names.insert(stem.to_string());
+            }
+        }
         for (idx, item) in items.iter().enumerate() {
             let abs = abstracts
                 .get(&item.id)
@@ -172,9 +179,6 @@ pub fn write_markdown_plan(
         };
 
         let session_dir = Path::new(outdir).join(&session_slug);
-        plan.push(PlanAction::DeleteDir {
-            path: session_dir.clone(),
-        });
         plan.push(PlanAction::CreateDir {
             path: session_dir.clone(),
         });

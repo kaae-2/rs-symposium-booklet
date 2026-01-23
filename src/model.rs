@@ -29,10 +29,3 @@ pub struct Session {
     pub order: u32,
     pub items: Vec<ItemRef>,
 }
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Manifest {
-    pub event: String,
-    pub sessions: Vec<Session>,
-}

@@ -6,6 +6,17 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
+const MAX_SESSION_SLUG_LEN: usize = 60;
+const MAX_TITLE_SLUG_LEN: usize = 80;
+
+fn truncate_slug(input: &str, max_len: usize) -> String {
+    if input.len() <= max_len {
+        return input.to_string();
+    }
+    let trimmed = input[..max_len].trim_end_matches('-');
+    trimmed.to_string()
+}
+
 pub fn write_markdown(
     abstracts: &HashMap<String, Abstract>,
     sessions: &Vec<Session>,
@@ -30,7 +41,7 @@ pub fn write_markdown(
         let session_slug = if slug_safe.is_empty() {
             format!("session-{}", session.order)
         } else {
-            slug_safe
+            truncate_slug(&slug_safe, MAX_SESSION_SLUG_LEN)
         };
 
         let session_dir = Path::new(outdir).join(&session_slug);
@@ -53,10 +64,11 @@ pub fn write_markdown(
                 .chars()
                 .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
                 .collect();
-            let filename_base = if title_safe.is_empty() {
+            let title_slug = truncate_slug(&title_safe, MAX_TITLE_SLUG_LEN);
+            let filename_base = if title_slug.is_empty() {
                 format!("{:04}", idx + 1)
             } else {
-                format!("{:04}-{}", idx + 1, title_safe)
+                format!("{:04}-{}", idx + 1, title_slug)
             };
 
             // ensure filename uniqueness within session and vs existing files by
@@ -135,7 +147,9 @@ pub fn write_markdown_plan(
     use std::path::PathBuf;
 
     // ensure output dir would exist
-    plan.push(PlanAction::CreateDir { path: PathBuf::from(outdir) });
+    plan.push(PlanAction::CreateDir {
+        path: PathBuf::from(outdir),
+    });
 
     for session in sessions.iter() {
         let mut slug = slugify(&session.title);
@@ -149,11 +163,13 @@ pub fn write_markdown_plan(
         let session_slug = if slug_safe.is_empty() {
             format!("session-{}", session.order)
         } else {
-            slug_safe
+            truncate_slug(&slug_safe, MAX_SESSION_SLUG_LEN)
         };
 
         let session_dir = Path::new(outdir).join(&session_slug);
-        plan.push(PlanAction::CreateDir { path: session_dir.clone() });
+        plan.push(PlanAction::CreateDir {
+            path: session_dir.clone(),
+        });
 
         let mut items = session.items.clone();
         items.sort_by_key(|i| i.order);
@@ -171,10 +187,11 @@ pub fn write_markdown_plan(
                 .chars()
                 .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
                 .collect();
-            let filename_base = if title_safe.is_empty() {
+            let title_slug = truncate_slug(&title_safe, MAX_TITLE_SLUG_LEN);
+            let filename_base = if title_slug.is_empty() {
                 format!("{:04}", idx + 1)
             } else {
-                format!("{:04}-{}", idx + 1, title_safe)
+                format!("{:04}-{}", idx + 1, title_slug)
             };
 
             let mut candidate = filename_base.clone();
@@ -192,11 +209,17 @@ pub fn write_markdown_plan(
             let path = session_dir.join(format!("{}.md", candidate));
             // produce a short summary for plan
             let summary = format!("{} — locale:{}", abs.title, abs.locale);
-            plan.push(PlanAction::WriteFile { path: PathBuf::from(path), summary });
+            plan.push(PlanAction::WriteFile {
+                path: PathBuf::from(path),
+                summary,
+            });
         }
 
         // manifest session entry
-        plan.push(PlanAction::UpdateManifest { path: PathBuf::from(outdir).join("manifest.json"), manifest_summary: format!("session {} => {} items", session.title, session.items.len()) });
+        plan.push(PlanAction::UpdateManifest {
+            path: PathBuf::from(outdir).join("manifest.json"),
+            manifest_summary: format!("session {} => {} items", session.title, session.items.len()),
+        });
     }
 
     Ok(())

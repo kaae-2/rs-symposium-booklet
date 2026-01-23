@@ -12,7 +12,8 @@ Markdown file convention
 - YAML frontmatter required with fields:
   - `id`, `title`, `authors` (array), `session`, `order`, `locale`
 - Body: the abstract text (plain text), with minimal normalization to paragraphs.
-- Filenames: slugify title and prepend four-digit order within session (e.g., `0001-my-talk.md`). Ensure uniqueness by appending `-1`, `-2` if slugs collide.
+- Author parsing: authors are split on `;` or `og`. Each author entry is split on commas; the first segment is treated as the author name and the last segment is aggregated into the `affiliation` field.
+- Filenames: slugify title and prepend four-digit order within session (e.g., `0001-my-talk.md`). Ensure uniqueness by appending `-1`, `-2` if slugs collide. Slugs are ASCII-only and truncated to avoid Windows path length issues (session slug ~60 chars, title slug ~80 chars).
 
 Manifest
 
@@ -29,5 +30,4 @@ Localization
 
 Notes on current implementation
 
-- The emitter writes `output/typst/book_<locale>.typ` by merging a starter template with generated content. Currently the emitter may inadvertently copy template comments or markdown-style fragments into the output, producing invalid Typst source that fails during `typst compile`.
-- Recommended remediation: either make `templates/starter/book.typ` a minimal, valid Typst wrapper with a single `{{CONTENT}}` placeholder (no placeholder mentions inside comments), or update the emitter to produce fully validated Typst output (preferred). Also add unit tests and a small fixture to verify emitted `.typ` files parse with `typst`.
+- The emitter writes `output/typst/book_<locale>.typ` as a minimal, validated Typst document (no template merge). A compile smoke test is included to ensure Typst output stays parseable.

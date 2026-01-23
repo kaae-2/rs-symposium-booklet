@@ -245,6 +245,8 @@ fn escape_typst_text(input: &str) -> String {
     input
         .replace('\\', "\\\\")
         .replace('#', "\\#")
+        .replace('<', "\\<")
+        .replace('>', "\\>")
         .replace('[', "\\[")
         .replace(']', "\\]")
         .replace('{', "\\{")

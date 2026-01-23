@@ -133,20 +133,20 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
             .unwrap_or_else(|| "Affiliation".to_string());
 
         // build generated content into a string
-        let mut gen = String::new();
+        let mut r#gen = String::new();
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             let mut first_session = true;
             for (sess_title, abstracts) in sess_list {
                 if !first_session {
-                    gen.push_str("#pagebreak()\n");
+                    r#gen.push_str("#pagebreak()\n");
                 }
                 first_session = false;
 
                 let sess_title_upper = escape_typst_text(&sess_title.to_uppercase());
-                gen.push_str("#set page(fill: brand-blue)\n");
-                gen.push_str(&format!("= {}\n\n", sess_title_upper));
-                gen.push_str("#pagebreak()\n#set page(fill: none)\n");
+                r#gen.push_str("#set page(fill: brand-blue)\n");
+                r#gen.push_str(&format!("= {}\n\n", sess_title_upper));
+                r#gen.push_str("#pagebreak()\n#set page(fill: none)\n");
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
@@ -154,12 +154,12 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 for (idx, (fm, body)) in abs_sorted.into_iter().enumerate() {
                     let abs_title = escape_typst_text(&fm.title);
                     let abs_label = label_for_abstract(&fm);
-                    gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
+                    r#gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
                     // add authors/affiliation
                     let mut meta_written = false;
                     if let Some(auths) = &fm.authors {
                         let joined = auths.join(", ");
-                        gen.push_str(&format!(
+                        r#gen.push_str(&format!(
                             "*{}*: {}\n",
                             escape_typst_text(&authors_label),
                             escape_typst_text(&joined)
@@ -168,7 +168,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     }
                     if let Some(aff) = &fm.affiliation {
                         if fm.authors.is_some() {
-                            gen.push_str("#v(6pt)\n");
+                            r#gen.push_str("#v(6pt)\n");
                         }
                         let affiliations = unique_list(aff);
                         let aff_text = if affiliations.is_empty() {
@@ -176,7 +176,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                         } else {
                             escape_typst_text(&affiliations.join("; "))
                         };
-                        gen.push_str(&format!(
+                        r#gen.push_str(&format!(
                             "*{}*: {}\n",
                             escape_typst_text(&affiliation_label),
                             aff_text
@@ -185,14 +185,14 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     }
                     let body_text = escape_typst_text(body.trim());
                     if meta_written {
-                        gen.push_str("#v(8pt)\n");
+                        r#gen.push_str("#v(8pt)\n");
                     }
-                    gen.push('\n');
-                    gen.push_str(&body_text);
-                    gen.push_str("\n\n");
+                    r#gen.push('\n');
+                    r#gen.push_str(&body_text);
+                    r#gen.push_str("\n\n");
                     if let Some(take_home) = &fm.take_home {
-                        gen.push_str("#v(8pt)\n");
-                        gen.push_str(&format!(
+                        r#gen.push_str("#v(8pt)\n");
+                        r#gen.push_str(&format!(
                             "*{}*: #emph[{}]\n",
                             escape_typst_text(&take_home_label),
                             escape_typst_text(take_home)
@@ -201,8 +201,8 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     if let Some(tags) = &fm.keywords {
                         let formatted = format_tags(tags);
                         if !formatted.is_empty() {
-                            gen.push_str("#v(8pt)\n");
-                            gen.push_str(&format!(
+                            r#gen.push_str("#v(8pt)\n");
+                            r#gen.push_str(&format!(
                                 "#set par(justify: false)\n#text(size: 8.5pt, fill: rgb(\"#646c6f\"))[*{}*: {}]\n#set par(justify: true)\n",
                                 escape_typst_text(&tags_label),
                                 escape_typst_text(&formatted.join(" "))
@@ -210,12 +210,12 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                         }
                     }
                     if idx + 1 < abs_len {
-                        gen.push_str("#pagebreak()\n\n");
+                        r#gen.push_str("#pagebreak()\n\n");
                     }
                 }
             }
         } else {
-            gen.push_str(&format!(
+            r#gen.push_str(&format!(
                 "No content for locale \"{}\".\n",
                 escape_typst_text(locale)
             ));
@@ -259,11 +259,11 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 tag_map.entry(tag).or_default().extend(titles.clone());
             }
             if !tag_map.is_empty() {
-                gen.push_str("#pagebreak()\n");
-                gen.push_str(
+                r#gen.push_str("#pagebreak()\n");
+                r#gen.push_str(
                     "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Source Sans 3\")\n  #text(fill: brand-blue)[#it.body]\n]\n",
                 );
-                gen.push_str(&format!("= {}\n\n", escape_typst_text(&tag_index_label)));
+                r#gen.push_str(&format!("= {}\n\n", escape_typst_text(&tag_index_label)));
                 for (tag, titles) in tag_map.iter() {
                     let mut uniq = titles.clone();
                     uniq.sort_by(|a, b| a.0.cmp(&b.0));
@@ -278,13 +278,13 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                             )
                         })
                         .collect();
-                    gen.push_str(&format!(
+                    r#gen.push_str(&format!(
                         "- {}: {}\n",
                         escape_typst_text(tag),
                         links.join("; ")
                     ));
                 }
-                gen.push('\n');
+                r#gen.push('\n');
             }
         }
 
@@ -345,7 +345,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
             escape_typst_text(&toc_label)
         );
 
-        let out_text = format!("{}{}{}{}", header, toc_section, gen, "\n");
+        let out_text = format!("{}{}{}{}", header, toc_section, r#gen, "\n");
 
         let mut f = File::create(&path)?;
         write!(f, "{}", out_text)?;

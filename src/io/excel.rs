@@ -107,12 +107,12 @@ fn push_session(
         id,
         title,
         order,
-        items: items.drain(..).collect(),
+        items: std::mem::take(items),
     });
     Ok(())
 }
 
-pub fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<usize> {
+pub fn find_header_row(rows: &[Vec<String>], _candidates: &[&str]) -> Option<usize> {
     for (i, row) in rows.iter().take(12).enumerate() {
         let lowered: Vec<String> = row.iter().map(|c| c.to_lowercase()).collect();
         let mut has_id = false;
@@ -136,8 +136,107 @@ pub fn find_header_row(rows: &Vec<Vec<String>>, _candidates: &[&str]) -> Option<
     None
 }
 
+fn chars_eq_case_insensitive(a: char, b: char) -> bool {
+    let mut a_lower = a.to_lowercase();
+    let mut b_lower = b.to_lowercase();
+    a_lower.next() == b_lower.next() && a_lower.next().is_none() && b_lower.next().is_none()
+}
+
+fn match_label_at(chars: &[(usize, char)], start: usize, label: &str) -> Option<usize> {
+    let mut idx = start;
+    for label_ch in label.chars() {
+        if idx >= chars.len() {
+            return None;
+        }
+        let ch = chars[idx].1;
+        if !chars_eq_case_insensitive(ch, label_ch) {
+            return None;
+        }
+        idx += 1;
+    }
+    Some(idx)
+}
+
+fn skip_whitespace(chars: &[(usize, char)], mut idx: usize) -> usize {
+    while idx < chars.len() && chars[idx].1.is_whitespace() {
+        idx += 1;
+    }
+    idx
+}
+
+fn clean_abstract_text(input: &str) -> String {
+    let labels = [
+        "Baggrund",
+        "Formål",
+        "Metode og materiale",
+        "Resultater",
+        "Diskussion",
+        "Konklusion",
+        "Background",
+        "Objective",
+        "Aim",
+        "Purpose",
+        "Methods and materials",
+        "Materials and methods",
+        "Results",
+        "Discussion",
+        "Conclusion",
+    ];
+    let chars: Vec<(usize, char)> = input.char_indices().collect();
+    let mut out = String::with_capacity(input.len());
+    let mut idx = 0;
+
+    while idx < chars.len() {
+        let mut matched = None;
+        let mut prev_idx = idx;
+        let mut prev_non_ws = None;
+        while prev_idx > 0 {
+            prev_idx -= 1;
+            let ch = chars[prev_idx].1;
+            if !ch.is_whitespace() {
+                prev_non_ws = Some(ch);
+                break;
+            }
+        }
+        let prev_is_boundary = prev_non_ws
+            .map(|ch| ch == '/' || ch == ':' || ch == '.' || ch == ',' || ch == ';')
+            .unwrap_or(true);
+        for label in labels.iter() {
+            if let Some(after_label) = match_label_at(&chars, idx, label) {
+                let after_space = skip_whitespace(&chars, after_label);
+                let has_space = after_space > after_label;
+                if after_space < chars.len() {
+                    let delim = chars[after_space].1;
+                    if delim == '/' || delim == ':' || delim == '.' || delim == ',' || delim == ';'
+                    {
+                        let after_delim = skip_whitespace(&chars, after_space + 1);
+                        matched = Some(after_delim);
+                        break;
+                    }
+                    if has_space && (delim.is_uppercase() || delim.is_ascii_digit()) {
+                        matched = Some(after_space);
+                        break;
+                    }
+                    if has_space && prev_is_boundary {
+                        matched = Some(after_space);
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some(next_idx) = matched {
+            idx = next_idx;
+            continue;
+        }
+        out.push(chars[idx].1);
+        idx += 1;
+    }
+    out
+}
+
 // Extract parsing of abstracts from a rows buffer into a helper so tests can exercise
 // duplicate-id handling and header-detection without needing actual workbook files.
+#[allow(dead_code)]
 pub fn parse_abstracts_from_rows(
     rows_a: &[Vec<String>],
     header_idx: usize,
@@ -192,6 +291,7 @@ pub fn parse_abstracts_from_rows(
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
+        let abstract_text = clean_abstract_text(&abstract_text);
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -268,7 +368,7 @@ pub fn parse_abstracts_from_rows(
 }
 
 fn find_sheet_by_substr(path: &str, subs: &[&str]) -> Result<String> {
-    let mut wb = open_workbook_auto(path).map_err(|e| anyhow!("open failed: {}", e))?;
+    let wb = open_workbook_auto(path).map_err(|e| anyhow!("open failed: {}", e))?;
     for name in wb.sheet_names() {
         let low = name.to_lowercase();
         for &s in subs {
@@ -278,11 +378,10 @@ fn find_sheet_by_substr(path: &str, subs: &[&str]) -> Result<String> {
         }
     }
     // fallback to first sheet
-    Ok(wb
-        .sheet_names()
-        .get(0)
+    wb.sheet_names()
+        .first()
         .cloned()
-        .ok_or_else(|| anyhow!("no sheets in workbook {}", path))?)
+        .ok_or_else(|| anyhow!("no sheets in workbook {}", path))
 }
 
 pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Session>)> {
@@ -321,7 +420,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             }
         }
         if file_a.is_none() {
-            file_a = xls.get(0).cloned();
+            file_a = xls.first().cloned();
         }
         if file_b.is_none() {
             if xls.len() > 1 {
@@ -439,6 +538,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
+        let abstract_text = clean_abstract_text(&abstract_text);
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -530,10 +630,10 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
     let mut item_counter = 1u32;
 
     // helper to flush current session
-    let mut flush_session = |sessions: &mut Vec<Session>,
-                             seen: &mut HashMap<String, u32>,
-                             title: Option<String>,
-                             items: &mut Vec<ItemRef>|
+    let flush_session = |sessions: &mut Vec<Session>,
+                         seen: &mut HashMap<String, u32>,
+                         title: Option<String>,
+                         items: &mut Vec<ItemRef>|
      -> Result<()> {
         let title = title.unwrap_or_else(|| "(unnamed)".to_string());
         push_session(sessions, seen, title, items)
@@ -613,25 +713,7 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
         }
     }
 
-    // add unreferenced abstracts into an 'Unassigned' session (soft handling)
-    let mut unassigned_items: Vec<ItemRef> = Vec::new();
-    for (id, _a) in &abstract_map {
-        if !referenced.contains(id) {
-            unassigned_items.push(ItemRef {
-                id: id.clone(),
-                order: unassigned_items.len() as u32 + 1,
-            });
-        }
-    }
-    if !unassigned_items.is_empty() {
-        let order = sessions.len() as u32 + 1;
-        sessions.push(Session {
-            id: "unassigned".to_string(),
-            title: "Unassigned".to_string(),
-            order,
-            items: unassigned_items,
-        });
-    }
+    // Unreferenced abstracts are not added to an automatic session.
 
     Ok((abstract_map, sessions))
 }
@@ -707,6 +789,7 @@ pub fn parse_two_workbooks(
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
+        let abstract_text = clean_abstract_text(&abstract_text);
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -784,9 +867,9 @@ pub fn parse_two_workbooks(
     let sheet_b = match find_sheet_by_substr(file_b, &["gruppering", "grupper", "poster"]) {
         Ok(s) => s,
         Err(_) => match open_workbook_auto(file_b) {
-            Ok(mut wb) => wb
+            Ok(wb) => wb
                 .sheet_names()
-                .get(0)
+                .first()
                 .cloned()
                 .unwrap_or_else(|| "Sheet1".to_string()),
             Err(_) => "Sheet1".to_string(),
@@ -807,10 +890,10 @@ pub fn parse_two_workbooks(
     let mut current_items: Vec<ItemRef> = Vec::new();
     let mut item_counter = 1u32;
 
-    let mut flush_session = |sessions: &mut Vec<Session>,
-                             seen: &mut HashMap<String, u32>,
-                             title: Option<String>,
-                             items: &mut Vec<ItemRef>|
+    let flush_session = |sessions: &mut Vec<Session>,
+                         seen: &mut HashMap<String, u32>,
+                         title: Option<String>,
+                         items: &mut Vec<ItemRef>|
      -> Result<()> {
         let title = title.unwrap_or_else(|| "(unnamed)".to_string());
         push_session(sessions, seen, title, items)
@@ -883,24 +966,7 @@ pub fn parse_two_workbooks(
             referenced.insert(it.id.clone());
         }
     }
-    let mut unassigned_items: Vec<ItemRef> = Vec::new();
-    for (id, _a) in &abstract_map {
-        if !referenced.contains(id) {
-            unassigned_items.push(ItemRef {
-                id: id.clone(),
-                order: unassigned_items.len() as u32 + 1,
-            });
-        }
-    }
-    if !unassigned_items.is_empty() {
-        let order = sessions.len() as u32 + 1;
-        sessions.push(Session {
-            id: "unassigned".to_string(),
-            title: "Unassigned".to_string(),
-            order,
-            items: unassigned_items,
-        });
-    }
+    // Unreferenced abstracts are not added to an automatic session.
 
     Ok((abstract_map, sessions))
 }

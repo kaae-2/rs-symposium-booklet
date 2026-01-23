@@ -4,16 +4,19 @@ Summary
 
 Create a cross-platform Rust CLI `symposium-booklet` that:
 
-- Reads two Excel sheets (abstracts + inclusion/session mapping).
-- Produces a structured set of Markdown files with YAML frontmatter organized by session.
-- Generates localized Typst files (English/Danish UI) and invokes the local `typst` binary to render a single A5 booklet PDF per locale.
+- Reads either a single Excel workbook (abstracts + grouping sheets) or a directory containing two `.xlsx` workbooks.
+- Produces Markdown files with YAML frontmatter organized by session.
+- Generates localized Typst entry files and optionally invokes the local `typst` binary to render an A5 booklet PDF per locale.
 
 Goals
 
-- Strict validation: abort on missing required data or invalid references before writing files.
-- Maintain abstract text as-is (Danish); only UI strings and Typst templates are localized.
-- Starter Typst template follows the Region H design guide for hospital branding.
-- Output: one PDF per locale: `symposium-<event>_en.pdf` and `symposium-<event>_da.pdf`.
+- Validate input early (header detection, duplicate IDs, missing references) before writing files.
+- Preserve abstract text as provided, with only light cleanup of section labels.
+- Provide a minimal branded Typst layout with a table of contents and tag index.
+
+Outputs
+
+- One PDF per locale when Typst is available: `symposium-2026_<locale>.pdf`.
 
 Constraints
 

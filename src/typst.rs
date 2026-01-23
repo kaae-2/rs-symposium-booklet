@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct FrontMatter {
     id: String,
@@ -17,10 +18,11 @@ struct FrontMatter {
     order: Option<u32>,
     locale: Option<String>,
     keywords: Option<Vec<String>>,
+    take_home: Option<String>,
 }
 
 // Emit typst files by reading `outdir/manifest.json` and per-abstract markdown frontmatter.
-pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) -> Result<()> {
+pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -> Result<()> {
     let typst_dir = Path::new(outdir).join("typst");
     create_dir_all(&typst_dir)?;
 
@@ -36,7 +38,8 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
     let mf: JsonValue = serde_json::from_str(&mf_text)?;
 
     // build a map locale -> Vec<(session_title, Vec<(frontmatter, body)>)>
-    let mut locales: HashMap<String, Vec<(String, Vec<(FrontMatter, String)>)>> = HashMap::new();
+    type LocaleSessions = Vec<(String, Vec<(FrontMatter, String)>)>;
+    let mut locales: HashMap<String, LocaleSessions> = HashMap::new();
 
     if let Some(sessions) = mf.get("sessions").and_then(|s| s.as_array()) {
         for sess in sessions.iter() {
@@ -79,7 +82,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
             // group abstracts by locale
             for (fm, body) in abstracts.into_iter() {
                 let locale = fm.locale.clone().unwrap_or_else(|| "en".to_string());
-                let slot = locales.entry(locale).or_insert_with(Vec::new);
+                let slot = locales.entry(locale).or_default();
                 // find or push session entry
                 if let Some((_, v)) = slot.iter_mut().find(|(t, _)| t == &sess_title) {
                     v.push((fm, body));
@@ -108,10 +111,18 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
             .get("toc_label")
             .cloned()
             .unwrap_or_else(|| "Table of contents".to_string());
-        let index_label = labels
-            .get("index_label")
+        let take_home_label = labels
+            .get("take_home_label")
             .cloned()
-            .unwrap_or_else(|| "Index".to_string());
+            .unwrap_or_else(|| "Take-home".to_string());
+        let tags_label = labels
+            .get("tags_label")
+            .cloned()
+            .unwrap_or_else(|| "Tags".to_string());
+        let tag_index_label = labels
+            .get("tag_index_label")
+            .cloned()
+            .unwrap_or_else(|| "Tag index".to_string());
         let authors_label = labels
             .get("authors_label")
             .cloned()
@@ -121,23 +132,31 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
             .cloned()
             .unwrap_or_else(|| "Affiliation".to_string());
 
-        // build generated content into a string, and build a TOC list
+        // build generated content into a string
         let mut gen = String::new();
-        let mut toc_items: Vec<String> = Vec::new();
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
+            let mut first_session = true;
             for (sess_title, abstracts) in sess_list {
-                let sess_title_text = escape_typst_text(sess_title);
-                toc_items.push(format!("- {}", sess_title_text));
-                gen.push_str(&format!("== {}\n\n", sess_title_text));
+                if !first_session {
+                    gen.push_str("#pagebreak()\n");
+                }
+                first_session = false;
+
+                let sess_title_upper = escape_typst_text(&sess_title.to_uppercase());
+                gen.push_str("#set page(fill: brand-blue)\n");
+                gen.push_str(&format!("= {}\n\n", sess_title_upper));
+                gen.push_str("#pagebreak()\n#set page(fill: none)\n");
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
-                for (fm, body) in abs_sorted {
+                let abs_len = abs_sorted.len();
+                for (idx, (fm, body)) in abs_sorted.into_iter().enumerate() {
                     let abs_title = escape_typst_text(&fm.title);
-                    toc_items.push(format!("  - {}", abs_title));
-                    gen.push_str(&format!("=== {}\n\n", abs_title));
+                    let abs_label = label_for_abstract(&fm);
+                    gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
                     // add authors/affiliation
+                    let mut meta_written = false;
                     if let Some(auths) = &fm.authors {
                         let joined = auths.join(", ");
                         gen.push_str(&format!(
@@ -145,18 +164,54 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
                             escape_typst_text(&authors_label),
                             escape_typst_text(&joined)
                         ));
+                        meta_written = true;
                     }
                     if let Some(aff) = &fm.affiliation {
+                        if fm.authors.is_some() {
+                            gen.push_str("#v(6pt)\n");
+                        }
+                        let affiliations = unique_list(aff);
+                        let aff_text = if affiliations.is_empty() {
+                            escape_typst_text(aff)
+                        } else {
+                            escape_typst_text(&affiliations.join("; "))
+                        };
                         gen.push_str(&format!(
                             "*{}*: {}\n",
                             escape_typst_text(&affiliation_label),
-                            escape_typst_text(aff)
+                            aff_text
                         ));
+                        meta_written = true;
                     }
                     let body_text = escape_typst_text(body.trim());
-                    gen.push_str("\n");
+                    if meta_written {
+                        gen.push_str("#v(8pt)\n");
+                    }
+                    gen.push('\n');
                     gen.push_str(&body_text);
                     gen.push_str("\n\n");
+                    if let Some(take_home) = &fm.take_home {
+                        gen.push_str("#v(8pt)\n");
+                        gen.push_str(&format!(
+                            "*{}*: #emph[{}]\n",
+                            escape_typst_text(&take_home_label),
+                            escape_typst_text(take_home)
+                        ));
+                    }
+                    if let Some(tags) = &fm.keywords {
+                        let formatted = format_tags(tags);
+                        if !formatted.is_empty() {
+                            gen.push_str("#v(8pt)\n");
+                            gen.push_str(&format!(
+                                "#set par(justify: false)\n#text(size: 8.5pt, fill: rgb(\"#646c6f\"))[*{}*: {}]\n#set par(justify: true)\n",
+                                escape_typst_text(&tags_label),
+                                escape_typst_text(&formatted.join(" "))
+                            ));
+                        }
+                    }
+                    if idx + 1 < abs_len {
+                        gen.push_str("#pagebreak()\n\n");
+                    }
                 }
             }
         } else {
@@ -167,18 +222,25 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         }
 
         // build an index from keywords
-        let mut keyword_map: std::collections::BTreeMap<String, Vec<String>> =
+        let mut keyword_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
             std::collections::BTreeMap::new();
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             for (_sess_title, abstracts) in sess_list {
                 for (fm, _body) in abstracts.iter() {
                     if let Some(ks) = &fm.keywords {
                         for k in ks.iter() {
-                            let key = k.trim().to_string();
-                            if key.is_empty() {
-                                continue;
+                            let normalized = k.replace(" - ", ",").replace(". ", ",");
+                            for part in normalized.split(',') {
+                                let key = part.trim().to_lowercase();
+                                if key.is_empty() {
+                                    continue;
+                                }
+                                let label = label_for_abstract(fm);
+                                keyword_map
+                                    .entry(key)
+                                    .or_default()
+                                    .push((fm.title.clone(), label));
                             }
-                            keyword_map.entry(key).or_default().push(fm.title.clone());
                         }
                     }
                 }
@@ -186,41 +248,102 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, template: &Option<String>) ->
         }
 
         if !keyword_map.is_empty() {
-            gen.push_str(&format!("== {}\n\n", escape_typst_text(&index_label)));
+            let mut tag_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
+                std::collections::BTreeMap::new();
             for (k, titles) in keyword_map.iter() {
-                let uniq: Vec<String> = {
-                    let mut s = titles.clone();
-                    s.sort();
-                    s.dedup();
-                    s
-                };
-                let links: Vec<String> = uniq.iter().cloned().collect();
-                gen.push_str(&format!(
-                    "- {}: {}\n",
-                    escape_typst_text(k),
-                    escape_typst_text(&links.join("; "))
-                ));
+                let formatted = format_tags(std::slice::from_ref(k));
+                if formatted.is_empty() {
+                    continue;
+                }
+                let tag = formatted[0].clone();
+                tag_map.entry(tag).or_default().extend(titles.clone());
             }
-            gen.push_str("\n");
+            if !tag_map.is_empty() {
+                gen.push_str("#pagebreak()\n");
+                gen.push_str(
+                    "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Source Sans 3\")\n  #text(fill: brand-blue)[#it.body]\n]\n",
+                );
+                gen.push_str(&format!("= {}\n\n", escape_typst_text(&tag_index_label)));
+                for (tag, titles) in tag_map.iter() {
+                    let mut uniq = titles.clone();
+                    uniq.sort_by(|a, b| a.0.cmp(&b.0));
+                    uniq.dedup_by(|a, b| a.1 == b.1);
+                    let links: Vec<String> = uniq
+                        .iter()
+                        .map(|(title, label)| {
+                            let title_text = escape_typst_text(title);
+                            format!(
+                                "#link(<{}>)[{}] (#context counter(page).at(<{}>).at(0))",
+                                label, title_text, label
+                            )
+                        })
+                        .collect();
+                    gen.push_str(&format!(
+                        "- {}: {}\n",
+                        escape_typst_text(tag),
+                        links.join("; ")
+                    ));
+                }
+                gen.push('\n');
+            }
         }
 
         // Build a minimal validated Typst document to avoid template/comment
         // interpolation issues. This produces consistent output and is easy
         // to extend later with richer templates.
+        let title_upper = escape_typst_text(&title_label.to_uppercase());
         let header = format!(
-            "#set page(width: 148mm, height: 210mm, margin: 18mm)\n#set text(font: \"Libertinus Serif\")\n#set heading(numbering: \"1.\")\n\n= {}\n\n",
-            escape_typst_text(&title_label)
+            r##"#set page(
+  width: 148mm,
+  height: 210mm,
+  margin: (top: 20mm, bottom: 18mm, left: 18mm, right: 18mm),
+)
+#let brand-blue = rgb("#007dbb")
+#let brand-navy = rgb("#002555")
+#let brand-sky = rgb("#009ce8")
+#let brand-muted = rgb("#e5f2f8")
+#let page-footer = [
+  #align(center)[
+    #text(fill: rgb("#646c6f"), size: 8.5pt)[#context counter(page).display()]
+  ]
+]
+#set text(font: "Libertinus Serif", size: 10.5pt, fill: rgb("#333333"))
+#set par(justify: true)
+#set heading(numbering: none)
+#show heading.where(level: 1): it => block(above: 0pt, below: 0pt)[
+  #align(center)[
+    #v(90pt)
+    #text(size: 36pt, weight: "bold", font: "Source Sans 3", fill: white)[#it.body]
+  ]
+]
+#show heading.where(level: 2): it => block(above: 10pt, below: 10pt)[
+  #set text(size: 13pt, weight: "bold", font: "Source Sans 3")
+  #text(fill: brand-blue)[#it.body]
+]
+#show heading.where(level: 3): it => block(above: 8pt, below: 4pt)[
+  #set text(size: 11.5pt, weight: "semibold", font: "Source Sans 3")
+  #text(fill: brand-navy)[#it.body]
+]
+#show strong: set text(weight: "semibold", fill: brand-navy)
+
+#set page(footer: none)
+#set page(fill: gradient.linear(angle: 45deg, brand-blue, brand-sky))
+#align(center)[
+  #v(110pt)
+  #text(size: 40pt, weight: "bold", font: "Source Sans 3", fill: white)[{title_upper}]
+]
+#pagebreak()
+#set page(fill: none)
+#pagebreak()
+#set page(footer: page-footer)
+"##,
+            title_upper = title_upper
         );
 
-        let toc_section = if !toc_items.is_empty() {
-            format!(
-                "== {}\n\n{}\n\n",
-                escape_typst_text(&toc_label),
-                toc_items.join("\n")
-            )
-        } else {
-            "".to_string()
-        };
+        let toc_section = format!(
+            "#v(-16pt)\n#text(size: 15pt, weight: \"bold\", font: \"Source Sans 3\", fill: brand-blue)[Indholdsfortegnelse]\n#v(6pt)\n#set par(justify: false, spacing: 2pt)\n#set text(size: 9.5pt)\n#show outline.entry.where(level: 1): set text(weight: \"bold\")\n#outline(title: [{}], depth: 2, indent: 1.1em)\n#pagebreak()\n#set text(size: 10.5pt)\n#set par(justify: true)\n",
+            escape_typst_text(&toc_label)
+        );
 
         let out_text = format!("{}{}{}{}", header, toc_section, gen, "\n");
 
@@ -238,6 +361,9 @@ fn default_labels() -> HashMap<String, String> {
     m.insert("affiliation_label".to_string(), "Affiliation".to_string());
     m.insert("toc_label".to_string(), "Table of contents".to_string());
     m.insert("index_label".to_string(), "Index".to_string());
+    m.insert("take_home_label".to_string(), "Take-home".to_string());
+    m.insert("tags_label".to_string(), "Tags".to_string());
+    m.insert("tag_index_label".to_string(), "Tag index".to_string());
     m
 }
 
@@ -247,10 +373,87 @@ fn escape_typst_text(input: &str) -> String {
         .replace('#', "\\#")
         .replace('<', "\\<")
         .replace('>', "\\>")
+        .replace('_', "\\_")
         .replace('[', "\\[")
         .replace(']', "\\]")
         .replace('{', "\\{")
         .replace('}', "\\}")
+}
+
+fn unique_list(input: &str) -> Vec<String> {
+    let mut parts: Vec<String> = input
+        .replace(" / ", ";")
+        .split(';')
+        .flat_map(|part| part.split('/'))
+        .map(|part| part.trim())
+        .filter(|part| !part.is_empty())
+        .map(|part| part.to_string())
+        .collect();
+
+    if parts.len() <= 1 {
+        parts = input
+            .split(',')
+            .map(|part| part.trim())
+            .filter(|part| !part.is_empty())
+            .map(|part| part.to_string())
+            .collect();
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut unique = Vec::new();
+    for part in parts {
+        if seen.insert(part.to_lowercase()) {
+            unique.push(part);
+        }
+    }
+    unique
+}
+
+fn format_tags(tags: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for tag in tags.iter() {
+        let normalized = tag.replace(" - ", ",").replace(". ", ",");
+        for part in normalized.split(',') {
+            let cleaned = part.trim();
+            if cleaned.is_empty() {
+                continue;
+            }
+            let normalized = cleaned
+                .chars()
+                .map(|ch| if ch.is_whitespace() { '_' } else { ch })
+                .collect::<String>()
+                .to_lowercase();
+            let formatted = format!("#{}", normalized);
+            if seen.insert(formatted.to_lowercase()) {
+                out.push(formatted);
+            }
+        }
+    }
+    out
+}
+
+fn label_for_abstract(fm: &FrontMatter) -> String {
+    let base = if !fm.id.is_empty() {
+        fm.id.clone()
+    } else {
+        fm.title.clone()
+    };
+    let mut label: String = base
+        .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect();
+    while label.starts_with('-') {
+        label.remove(0);
+    }
+    while label.ends_with('-') {
+        label.pop();
+    }
+    if label.is_empty() {
+        label = "abstract".to_string();
+    }
+    format!("abs-{}", label)
 }
 
 fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
@@ -279,6 +482,15 @@ fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
     if let Some(t) = v.get("index_label").and_then(|s| s.as_str()) {
         m.insert("index_label".to_string(), t.to_string());
     }
+    if let Some(t) = v.get("take_home_label").and_then(|s| s.as_str()) {
+        m.insert("take_home_label".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("tags_label").and_then(|s| s.as_str()) {
+        m.insert("tags_label".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("tag_index_label").and_then(|s| s.as_str()) {
+        m.insert("tag_index_label".to_string(), t.to_string());
+    }
     Ok(m)
 }
 
@@ -291,6 +503,10 @@ pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>)
     let check = Command::new(&bin).arg("--version").output();
     match check {
         Ok(o) if o.status.success() => {
+            let font_path = Path::new("templates")
+                .join("starter")
+                .join("fonts")
+                .join("TTF");
             for locale in locales_csv
                 .split(',')
                 .map(|s| s.trim())
@@ -308,6 +524,8 @@ pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>)
                 // typst CLI accepts OUTPUT as a positional argument rather than `-o` in some versions
                 let status = Command::new(&bin)
                     .arg("compile")
+                    .arg("--font-path")
+                    .arg(&font_path)
                     .arg(typst_file)
                     .arg(out_pdf)
                     .status()?;
@@ -354,15 +572,20 @@ pub fn emit_typst_plan(
         let template_name = template
             .clone()
             .unwrap_or_else(|| "templates/starter/book.typ".to_string());
+        let font_path = Path::new("templates")
+            .join("starter")
+            .join("fonts")
+            .join("TTF");
         let cmd = Some(format!(
-            "typst compile {} -o {}",
+            "typst compile --font-path {} {} {}",
+            font_path.display(),
             path.display(),
             Path::new(outdir)
                 .join(format!("symposium-2026_{}.pdf", locale))
                 .display()
         ));
         plan.push(PlanAction::EmitTypst {
-            path: PathBuf::from(path),
+            path,
             template: template_name,
             command: cmd,
         });

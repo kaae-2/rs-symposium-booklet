@@ -9,14 +9,14 @@ Primary agent: OpenCode (assistant)
 Responsibilities
 
 - Interview & gather requirements: ask concise, targeted questions about localization, ordering, and branding (Excel schema is finalized).
-- Produce artefacts: spec files, example manifests, starter Typst templates, scaffold Rust project files, unit tests and example outputs.
-- Implement features when asked: parse Excel sheets, validate data strictly, write Markdown files, emit Typst entry files, and call the local `typst` binary to render PDFs.
+- Produce artefacts: spec files, example manifests, minimal Typst emitters, scaffold Rust project files, unit tests and example outputs.
+- Implement features when asked: parse Excel sheets, validate data strictly, write Markdown files, emit self-contained Typst entry files, and call the local `typst` binary to render PDFs.
 - Log and report: provide clear validation errors, runtime warnings (e.g., when `typst` is missing), and a manifest describing exported content.
 
 Behaviour & interaction model
 
 - The Excel schema is finalized; update specs if the input sheets change.
-- Use strict validation by default: any missing required header, duplicate IDs, or unresolved references aborts before filesystem writes.
+- Use strict validation by default: missing `id` column, duplicate IDs, or unresolved references abort before filesystem writes.
 - If `--dry-run` is used, validate and print planned actions without writing files.
 - When `typst` is not found on PATH, the agent will still emit typst files and print the exact `typst compile` command to run; it will not attempt to download or install binaries.
 - Preserve abstract text exactly as provided; do not attempt translation or modification of Danish content (only UI text/localized labels are generated separately).
@@ -24,12 +24,12 @@ Behaviour & interaction model
 Tools and libraries (implementation plan)
 
 - Rust crates: `clap`, `calamine` (xlsx parsing), `serde`/`serde_json`/`serde_yaml`, `slug`, `tracing` / `tracing-subscriber`.
-- Typst: the agent will generate `.typ` files and will call the local `typst` binary via `std::process::Command` if present.
+- Typst: the agent will generate self-contained `.typ` files and will call the local `typst` binary via `std::process::Command` if present.
 
 Files the agent will create (examples)
 
 - `spec/` (contains the split spec files and this `AGENTS.md`).
-- `templates/starter/` (starter typst template, locales, optional fonts).
+- `templates/starter/` (locales, optional fonts).
 - `output/` (manifest, per-session markdown files, generated typst files, and final PDF when typst is run).
 - `src/` Rust modules for CLI, Excel parsing, model, markdown emission, typst generation and validation.
 
@@ -46,5 +46,5 @@ Communication
 
 Next steps the agent will request from you
 
-1. Confirm preferred fonts or accept system font fallbacks for the typst template.
+1. Confirm whether the bundled Source Sans 3 + Libertinus Serif pairing is acceptable.
 2. Provide any branding constraints or additional layout requirements.

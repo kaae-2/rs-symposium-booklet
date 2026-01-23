@@ -1,4 +1,4 @@
-use crate::model::{Abstract, ItemRef, Manifest, Session};
+use crate::model::{Abstract, Session};
 use anyhow::{anyhow, Result};
 use slug::slugify;
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ fn truncate_slug(input: &str, max_len: usize) -> String {
 
 pub fn write_markdown(
     abstracts: &HashMap<String, Abstract>,
-    sessions: &Vec<Session>,
+    sessions: &[Session],
     outdir: &str,
 ) -> Result<()> {
     // ensure output exists
@@ -111,6 +111,9 @@ pub fn write_markdown(
                     writeln!(f, "  - \"{}\"", k)?;
                 }
             }
+            if let Some(take_home) = &abs.take_home {
+                writeln!(f, "take_home: \"{}\"", take_home)?;
+            }
             writeln!(f, "---\n")?;
 
             // write body
@@ -141,7 +144,7 @@ pub fn write_markdown(
 // produce a Plan of filesystem actions without performing writes
 pub fn write_markdown_plan(
     abstracts: &HashMap<String, Abstract>,
-    sessions: &Vec<Session>,
+    sessions: &[Session],
     outdir: &str,
     plan: &mut crate::io::plan::Plan,
 ) -> Result<()> {
@@ -213,10 +216,7 @@ pub fn write_markdown_plan(
             let path = session_dir.join(format!("{}.md", candidate));
             // produce a short summary for plan
             let summary = format!("{} — locale:{}", abs.title, abs.locale);
-            plan.push(PlanAction::WriteFile {
-                path: PathBuf::from(path),
-                summary,
-            });
+            plan.push(PlanAction::WriteFile { path, summary });
         }
 
         // manifest session entry

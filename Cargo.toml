@@ -1,8 +1,8 @@
 [package]
 name = "symposium-booklet"
 version = "0.1.0"
-edition = "2021"
-authors = ["OpenCode <opencode@example.com>"]
+edition = "2024"
+author = "Frederik Kirk"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

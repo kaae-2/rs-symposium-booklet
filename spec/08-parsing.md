@@ -1,88 +1,66 @@
-09 Parsing
+08 Parsing
 
 Purpose
 
-- Define how the tool parses the two input Excel files (abstracts and grouping/session) and the exact rules for validation and emitted parse JSON.
+- Define how the tool parses input Excel files and the rules used for validation and parse JSON output.
 
 Inputs
 
-- Two explicit Excel workbooks are required (the CLI and examples use explicit file paths):
-  - Abstracts workbook (Sheet A, one row per abstract)
-  - Grouping/session workbook (Sheet B, session definitions and poster-to-session mapping)
+- A single workbook containing both abstracts and sessions sheets, OR a directory containing two `.xlsx` files (abstracts + sessions).
+- When given a directory, the parser prefers filenames containing `with_ids`/`afsluttede` for abstracts and `kopi`/`grupper`/`final` for sessions, otherwise it uses the first two `.xlsx` files.
 
-Required headers (Abstracts sheet)
+Abstracts sheet
 
-- id — unique string identifier per abstract (required)
-- title / titel — text title (required)
-- abstract / resumé — abstract body text (required)
-- authors / forfatter — author list (required)
-
-Optional headers (Abstracts sheet)
-
-- affiliation / hospital — free text
-- Emne ord (3-5) or keywords — comma-separated index terms
-- Take-home messages — optional short conclusions
-- reference / doi — optional published reference
-- literature / references — optional free-text references
-- center — short centre code (optional)
-- contact_email — author/contact email (optional)
-- locale / sprog — optional language flag (defaults to da)
+- The sheet is selected by name heuristics (`afsluttede`, `abstract`, `resum`).
+- Header row detection scans the first 12 rows for an `id` column and a `title`/`abstract`/`resum` column.
+- Required column: `id`.
+- Column detection (case-insensitive substrings):
+  - title/titel, authors/author/forfatter, abstract/resum
+  - keywords/nøgle/emne ord
+  - take home/take-home
+  - reference/published/doi
+  - literature/litterature/references
+  - center/centre
+  - email/kontakt/contact
+  - locale/sprog
+- If a column is not found, the parser falls back to adjacent columns.
+- Abstract text is lightly cleaned to remove common section labels (Background, Objective, Methods, etc.).
+- Locale defaults to `da`.
 
 Authors parsing
 
-- Authors are split on `;` or `og`. Each author entry is split on commas; the first segment is treated as the author name and the last segment is treated as the affiliation source. These affiliation segments are aggregated into the `affiliation` field.
-- locale / sprog — optional language flag (defaults to da)
+- Authors are split on `;` or `og`.
+- Each author entry is split by comma; the first segment is the author name and the last segment becomes a unique affiliation entry.
 
-Grouping sheet structure
+Grouping/session sheet
 
-- The grouping workbook uses session header rows (no ids) followed by item rows where a cell contains one or more abstract ids (comma or semicolon separated). The parser treats rows with no id tokens as session headers.
-- Only the first matching grouping sheet is parsed (e.g., `gruppering på poster`); additional grouping sheets are ignored.
+- The sheet is selected by name heuristics (`gruppering`, `poster`, `session`, `include`).
+- Rows without abstract IDs are treated as session headers.
+- Rows containing known abstract IDs are treated as items; IDs can appear in any cell and may be comma/semicolon separated.
+- Item order is based on row order within the session.
 
 Validation rules
 
-- Missing required headers causes parser failure with a clear error listing the missing header and row context.
-- Duplicate abstract ids in the abstracts workbook cause validation failure.
-- All abstract ids referenced in the grouping workbook must exist in the abstracts workbook. If not, validation fails unless `--emit-parse-json` is used for diagnostic output (the CLI still reports missing references in the JSON).
-- Unreferenced abstracts are placed into an `Unassigned` session (soft handling) by default.
-- Discrepancies between `center`/`contact_email` fields in the two workbooks are captured in the parse JSON (report-only) and do not overwrite values.
+- Missing `id` column aborts.
+- Duplicate abstract IDs abort.
+- Missing references in sessions abort.
 
 Emit parse JSON
 
-- The CLI supports `--emit-parse-json`. When provided the tool will:
-  - Parse the inputs and validate references.
-  - Write a JSON file at `OUTPUT_DIR/tools_output/parse.json` with the structure described below.
-  - Exit without writing Markdown or running typst.
+- `build --emit-parse-json` writes `output/tools_output/parse.json` and exits without writing Markdown/Typst.
+- The tool still validates references before writing parse JSON.
 
 Parse JSON format
 
 - Top-level fields:
   - summary: { num_abstracts_parsed: number, num_sessions: number }
-  - abstracts: Array of Abstract objects (see data model below)
+  - abstracts: Array of Abstract objects
   - sessions: Array of Session objects (ordered)
-  - discrepancies: optional array of { id, field, abstract_value, grouping_value }
-  - missing_references: optional array of referenced ids not found in abstracts
 
-- Abstract object (serialized):
-  - id: String
-  - title: String
-  - authors: [String]
-  - affiliation: Option<String>
-  - center: Option<String>
-  - contact_email: Option<String>
-  - abstract_text: String
-  - keywords: [String]
-  - take_home: Option<String>
-  - reference: Option<String>
-  - literature: Option<String>
-  - locale: String
+Abstract object (serialized)
 
-- Session object:
-  - id: String
-  - title: String
-  - order: number
-  - items: [{ id: String, order: number }]
+- id, title, authors, affiliation, center, contact_email, abstract_text, keywords, take_home, reference, literature, locale
 
-Notes
+Session object
 
-- Filenames and slugs are sanitized and truncated to avoid filesystem errors on Windows (long titles are truncated). The CLI ensures ASCII slug characters only.
-- The parse JSON is intended as a diagnostic artifact and a machine-readable representation of the parsed model; downstream steps (markdown emission, typst generation) consume the same in-memory structures when run without `--emit-parse-json`.
+- id, title, order, items: [{ id, order }]

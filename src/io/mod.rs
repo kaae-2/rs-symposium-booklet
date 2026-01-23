@@ -2,8 +2,10 @@ pub mod excel;
 pub mod markdown;
 pub mod plan;
 
-pub use excel::{parse_two_workbooks, parse_workbook};
+#[allow(unused_imports)]
 pub use crate::io::plan::{Plan, PlanAction};
+#[allow(unused_imports)]
+pub use excel::{parse_two_workbooks, parse_workbook};
 
 use crate::cli::BuildOpts;
 use anyhow::Result;

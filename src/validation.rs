@@ -10,7 +10,7 @@ pub fn validate_input(input: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn validate_refs(abstracts: &HashMap<String, Abstract>, sessions: &Vec<Session>) -> Result<()> {
+pub fn validate_refs(abstracts: &HashMap<String, Abstract>, sessions: &[Session]) -> Result<()> {
     // ensure every referenced id exists
     for s in sessions.iter() {
         for item in s.items.iter() {

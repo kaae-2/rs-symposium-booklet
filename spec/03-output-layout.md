@@ -2,32 +2,36 @@
 
 Filesystem layout
 
-- `output/manifest.json` — master manifest describing sessions and items
-- `output/typst/` — generated typst files and templates
-- `output/<session-slug>/NNNN-<slug>.md` — markdown files per abstract
-- `output/symposium-<event>_en.pdf` and `_da.pdf` — generated PDF booklets
+- `output/manifest.json` — minimal manifest describing sessions.
+- `output/typst/book_<locale>.typ` — generated Typst entry files per locale.
+- `output/<session-slug>/NNNN-<slug>.md` — markdown files per abstract.
+- `output/symposium-2026_<locale>.pdf` — generated PDF booklets when Typst is available.
 
 Markdown file convention
 
-- YAML frontmatter required with fields:
-  - `id`, `title`, `authors` (array), `session`, `order`, `locale`
-- Body: the abstract text (plain text), with minimal normalization to paragraphs.
-- Author parsing: authors are split on `;` or `og`. Each author entry is split on commas; the first segment is treated as the author name and the last segment is aggregated into the `affiliation` field.
+- YAML frontmatter fields:
+  - `id`, `title`, `authors` (array), `affiliation` (optional), `session`, `order`, `locale`
+  - Optional: `keywords` (array), `take_home`
+- Body: abstract text (light cleanup removes common section labels).
 - Filenames: slugify title and prepend four-digit order within session (e.g., `0001-my-talk.md`). Ensure uniqueness by appending `-1`, `-2` if slugs collide. Slugs are ASCII-only and truncated to avoid Windows path length issues (session slug ~60 chars, title slug ~80 chars).
 
 Manifest
 
-- JSON manifest with full session and item metadata and relative file paths. Example structure:
-  - See spec/01-overview.md for a small example.
+- JSON manifest with:
+  - `event`: `symposium-2026`
+  - `sessions`: array of { id, title, slug, order, count }
 
 Index and keywords
 
-- If `keywords` provided in abstracts, split by comma and include in manifest; typst template will build an index from these keywords.
+- If `keywords` are provided in abstracts, Typst builds a tag index at the end of the booklet.
+- The tag index is emitted as a level-1 heading so it appears in the table of contents.
 
 Localization
 
-- Each markdown file retains `locale: da` for content. Typst templates will read `manifest.json` and generate UI-localized labels per output locale. 
+- UI labels are loaded from `templates/starter/locales/<locale>.toml`, with defaults in code.
 
 Notes on current implementation
 
-- The emitter writes `output/typst/book_<locale>.typ` as a minimal, validated Typst document (no template merge). A compile smoke test is included to ensure Typst output stays parseable.
+- Typst output is a self-contained, minimal document with embedded styles.
+- Source Sans 3 is bundled in `templates/starter/fonts/TTF` and is used for heading typography via `--font-path`.
+- The ToC is preceded by a Danish heading (`Indholdsfortegnelse`) and nudged upward on the page.

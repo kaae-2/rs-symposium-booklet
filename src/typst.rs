@@ -17,6 +17,13 @@ struct FrontMatter {
     locale: Option<String>,
     keywords: Option<Vec<String>>,
     take_home: Option<String>,
+    sections: Option<Vec<AbstractSection>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct AbstractSection {
+    label: String,
+    text: String,
 }
 
 // Emit typst files by reading `outdir/manifest.json` and per-abstract markdown frontmatter.
@@ -129,6 +136,26 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
             .get("affiliation_label")
             .cloned()
             .unwrap_or_else(|| "Affiliation".to_string());
+        let cover_header_label = labels
+            .get("cover_header")
+            .cloned()
+            .unwrap_or_else(|| "Interprofessional Education Symposium 2026".to_string());
+        let cover_title_label = labels
+            .get("cover_title")
+            .cloned()
+            .unwrap_or_else(|| "PROGRAM".to_string());
+        let cover_symposium_label = labels
+            .get("cover_symposium")
+            .cloned()
+            .unwrap_or_else(|| "Interprofessional Education Symposium".to_string());
+        let cover_date_label = labels
+            .get("cover_date")
+            .cloned()
+            .unwrap_or_else(|| "13 March 2026".to_string());
+        let cover_subtitle_label = labels
+            .get("cover_subtitle")
+            .cloned()
+            .unwrap_or_else(|| "The impact of intelligence on learning and guidance".to_string());
 
         // build generated content into a string
         let mut r#gen = String::new();
@@ -145,9 +172,12 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 first_session = false;
 
                 let sess_title_upper = escape_typst_text(&sess_title.to_uppercase());
-                r#gen.push_str("#set page(fill: brand-blue)\n");
+                r#gen.push_str("#set page(footer: none, header: none)\n#set page(fill: brand-blue)\n");
+                r#gen.push_str(
+                    "#show heading.where(level: 1): it => block(above: 0pt, below: 0pt)[\n  #align(center)[\n    #v(70pt)\n    #text(size: 28pt, weight: \"bold\", font: \"Mari\", fill: white)[#it.body]\n  ]\n]\n",
+                );
                 r#gen.push_str(&format!("= {}\n\n", sess_title_upper));
-                r#gen.push_str("#pagebreak()\n#set page(fill: none)\n");
+                r#gen.push_str("#pagebreak()\n#set page(fill: none, footer: page-footer, header: [#align(right)[#image(\"/templates/starter/images/Logo_dark.jpg\", height: 6mm)]])\n");
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
@@ -158,6 +188,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     r#gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
                     // add authors/affiliation
                     let mut meta_written = false;
+                    r#gen.push_str("#set text(size: 8.5pt)\n");
                     if let Some(auths) = &fm.authors {
                         let joined = auths.join(", ");
                         r#gen.push_str(&format!(
@@ -184,17 +215,47 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                         ));
                         meta_written = true;
                     }
-                    let body_text = escape_typst_text(body.trim());
+                    let mut body_text = String::new();
+                    if let Some(sections) = fm.sections.as_ref().filter(|s| !s.is_empty()) {
+                        let mut parts: Vec<(String, String)> = Vec::new();
+                        for section in sections.iter() {
+                            let label = section.label.trim().to_string();
+                            let text = section.text.trim().to_string();
+                            if text.is_empty() {
+                                continue;
+                            }
+                            parts.push((label, text));
+                        }
+                        if parts.is_empty() {
+                            body_text = escape_typst_text(body.trim());
+                        } else {
+                            for (idx, (label, text)) in parts.iter().enumerate() {
+                                let label_text = escape_typst_text(label);
+                                let text_body = escape_typst_text(text);
+                                if label_text.is_empty() {
+                                    body_text.push_str(&text_body);
+                                } else {
+                                    body_text.push_str(&format!("*{}*: {}", label_text, text_body));
+                                }
+                                if idx + 1 < parts.len() {
+                                    body_text.push_str("\n#v(6pt)\n");
+                                }
+                            }
+                        }
+                    } else {
+                        body_text = escape_typst_text(body.trim());
+                    }
                     if meta_written {
                         r#gen.push_str("#v(8pt)\n");
                     }
                     r#gen.push('\n');
+                    r#gen.push_str("#set text(size: 8.5pt)\n");
                     r#gen.push_str(&body_text);
-                    r#gen.push_str("\n\n");
+                    r#gen.push_str("\n#set text(size: 10.5pt)\n\n");
                     if let Some(take_home) = &fm.take_home {
                         r#gen.push_str("#v(8pt)\n");
                         r#gen.push_str(&format!(
-                            "*{}*: #emph[{}]\n",
+                            "#set text(size: 8.5pt)\n*{}*: {}\n",
                             escape_typst_text(&take_home_label),
                             escape_typst_text(take_home)
                         ));
@@ -204,7 +265,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                         if !formatted.is_empty() {
                             r#gen.push_str("#v(8pt)\n");
                             r#gen.push_str(&format!(
-                                "#set par(justify: false)\n#text(size: 8.5pt, fill: rgb(\"#646c6f\"))[*{}*: {}]\n#set par(justify: true)\n",
+                                "#set par(justify: false)\n#text(size: 6.5pt, fill: rgb(\"#646c6f\"))[*{}*: {}]\n#set par(justify: true)\n",
                                 escape_typst_text(&tags_label),
                                 escape_typst_text(&formatted.join(" "))
                             ));
@@ -249,9 +310,9 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 tag_map.entry(tag).or_default().extend(titles.clone());
             }
             if !tag_map.is_empty() {
-                r#gen.push_str("#pagebreak()\n");
+                r#gen.push_str("#pagebreak()\n#set page(header: none)\n");
                 r#gen.push_str(
-                    "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Source Sans 3\")\n  #text(fill: brand-blue)[#it.body]\n]\n",
+                    "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Mari\")\n  #text(fill: brand-blue)[#it.body]\n]\n",
                 );
                 r#gen.push_str(&format!("= {}\n\n", escape_typst_text(&tag_index_label)));
                 for (tag, titles) in tag_map.iter() {
@@ -281,61 +342,25 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
         // Build a minimal validated Typst document to avoid template/comment
         // interpolation issues. This produces consistent output and is easy
         // to extend later with richer templates.
-        let title_upper = escape_typst_text(&title_label.to_uppercase());
-        let header = format!(
-            r##"#set page(
-  width: 148mm,
-  height: 210mm,
-  margin: (top: 20mm, bottom: 18mm, left: 18mm, right: 18mm),
-)
-#let brand-blue = rgb("#007dbb")
-#let brand-navy = rgb("#002555")
-#let brand-sky = rgb("#009ce8")
-#let brand-muted = rgb("#e5f2f8")
-#let page-footer = [
-  #align(center)[
-    #text(fill: rgb("#646c6f"), size: 8.5pt)[#context counter(page).display()]
-  ]
-]
-#set text(font: "Libertinus Serif", size: 10.5pt, fill: rgb("#333333"))
-#set par(justify: true)
-#set heading(numbering: none)
-#show heading.where(level: 1): it => block(above: 0pt, below: 0pt)[
-  #align(center)[
-    #v(90pt)
-    #text(size: 36pt, weight: "bold", font: "Source Sans 3", fill: white)[#it.body]
-  ]
-]
-#show heading.where(level: 2): it => block(above: 10pt, below: 10pt)[
-  #set text(size: 13pt, weight: "bold", font: "Source Sans 3")
-  #text(fill: brand-blue)[#it.body]
-]
-#show heading.where(level: 3): it => block(above: 8pt, below: 4pt)[
-  #set text(size: 11.5pt, weight: "semibold", font: "Source Sans 3")
-  #text(fill: brand-navy)[#it.body]
-]
-#show strong: set text(weight: "semibold", fill: brand-navy)
-
-#set page(footer: none)
-#set page(fill: gradient.linear(angle: 45deg, brand-blue, brand-sky))
-#align(center)[
-  #v(110pt)
-  #text(size: 40pt, weight: "bold", font: "Source Sans 3", fill: white)[{title_upper}]
-]
-#pagebreak()
-#set page(fill: none)
-#pagebreak()
-#set page(footer: page-footer)
-"##,
-            title_upper = title_upper
-        );
-
-        let toc_section = format!(
-            "#v(-16pt)\n#text(size: 15pt, weight: \"bold\", font: \"Source Sans 3\", fill: brand-blue)[Indholdsfortegnelse]\n#v(6pt)\n#set par(justify: false, spacing: 2pt)\n#set text(size: 9.5pt)\n#show outline.entry.where(level: 1): set text(weight: \"bold\")\n#outline(title: [{}], depth: 2, indent: 1.1em)\n#pagebreak()\n#set text(size: 10.5pt)\n#set par(justify: true)\n",
-            escape_typst_text(&toc_label)
-        );
-
-        let out_text = format!("{}{}{}{}", header, toc_section, r#gen, "\n");
+        let cover_header = escape_typst_text(&cover_header_label);
+        let cover_title = escape_typst_text(&cover_title_label);
+        let cover_symposium = escape_typst_text(&cover_symposium_label);
+        let cover_date = escape_typst_text(&cover_date_label);
+        let cover_subtitle = escape_typst_text(&cover_subtitle_label);
+        let template_path = _template
+            .clone()
+            .unwrap_or_else(|| "templates/starter/book.typ".to_string());
+        let template_text = read_to_string(&template_path)?;
+        let mut out_text = template_text;
+        out_text = out_text.replace("{{TITLE}}", &escape_typst_text(&title_label));
+        out_text = out_text.replace("{{LOCALE}}", &escape_typst_text(locale));
+        out_text = out_text.replace("{{TOC_LABEL}}", &escape_typst_text(&toc_label));
+        out_text = out_text.replace("{{COVER_HEADER}}", &cover_header);
+        out_text = out_text.replace("{{COVER_TITLE}}", &cover_title);
+        out_text = out_text.replace("{{COVER_SYMPOSIUM}}", &cover_symposium);
+        out_text = out_text.replace("{{COVER_DATE}}", &cover_date);
+        out_text = out_text.replace("{{COVER_SUBTITLE}}", &cover_subtitle);
+        out_text = out_text.replace("{{CONTENT}}", &format!("{}\n", r#gen));
 
         let mut f = File::create(&path)?;
         write!(f, "{}", out_text)?;
@@ -354,6 +379,20 @@ fn default_labels() -> HashMap<String, String> {
     m.insert("take_home_label".to_string(), "Take-home".to_string());
     m.insert("tags_label".to_string(), "Tags".to_string());
     m.insert("tag_index_label".to_string(), "Tag index".to_string());
+    m.insert(
+        "cover_header".to_string(),
+        "Interprofessional Education Symposium 2026".to_string(),
+    );
+    m.insert("cover_title".to_string(), "PROGRAM".to_string());
+    m.insert(
+        "cover_symposium".to_string(),
+        "Interprofessional Education Symposium".to_string(),
+    );
+    m.insert("cover_date".to_string(), "13 March 2026".to_string());
+    m.insert(
+        "cover_subtitle".to_string(),
+        "The impact of intelligence on learning and guidance".to_string(),
+    );
     m
 }
 
@@ -503,6 +542,21 @@ fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
     if let Some(t) = v.get("tag_index_label").and_then(|s| s.as_str()) {
         m.insert("tag_index_label".to_string(), t.to_string());
     }
+    if let Some(t) = v.get("cover_header").and_then(|s| s.as_str()) {
+        m.insert("cover_header".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("cover_title").and_then(|s| s.as_str()) {
+        m.insert("cover_title".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("cover_symposium").and_then(|s| s.as_str()) {
+        m.insert("cover_symposium".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("cover_date").and_then(|s| s.as_str()) {
+        m.insert("cover_date".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("cover_subtitle").and_then(|s| s.as_str()) {
+        m.insert("cover_subtitle".to_string(), t.to_string());
+    }
     Ok(m)
 }
 
@@ -536,6 +590,8 @@ pub fn maybe_run_typst(outdir: &str, locales_csv: &str, typst_bin: Option<&str>)
                 // typst CLI accepts OUTPUT as a positional argument rather than `-o` in some versions
                 let status = Command::new(&bin)
                     .arg("compile")
+                    .arg("--root")
+                    .arg(".")
                     .arg("--font-path")
                     .arg(&font_path)
                     .arg(typst_file)
@@ -589,7 +645,7 @@ pub fn emit_typst_plan(
             .join("fonts")
             .join("TTF");
         let cmd = Some(format!(
-            "typst compile --font-path {} {} {}",
+            "typst compile --root . --font-path {} {} {}",
             font_path.display(),
             path.display(),
             Path::new(outdir)

@@ -9,11 +9,18 @@ pub struct Abstract {
     pub center: Option<String>,
     pub contact_email: Option<String>,
     pub abstract_text: String,
+    pub abstract_sections: Vec<AbstractSection>,
     pub keywords: Vec<String>,
     pub take_home: Option<String>,
     pub reference: Option<String>,
     pub literature: Option<String>,
     pub locale: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AbstractSection {
+    pub label: String,
+    pub text: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

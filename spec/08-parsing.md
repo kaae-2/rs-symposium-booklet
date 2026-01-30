@@ -24,7 +24,9 @@ Abstracts sheet
   - email/kontakt/contact
   - locale/sprog
 - If a column is not found, the parser falls back to adjacent columns.
-- Abstract text is lightly cleaned to remove common section labels (Background, Objective, Methods, etc.).
+- Abstract text is split into sections based on common labels (Background, Objective, Methods, etc.).
+- Section labels are normalized by trimming whitespace and stripping trailing commas, periods, and colons.
+- If the abstract starts without a known label, a default label is inserted (locale-based: `Resumé` for `da`, `Abstract` otherwise).
 - Locale defaults to `da`.
 
 Authors parsing
@@ -59,7 +61,7 @@ Parse JSON format
 
 Abstract object (serialized)
 
-- id, title, authors, affiliation, center, contact_email, abstract_text, keywords, take_home, reference, literature, locale
+- id, title, authors, affiliation, center, contact_email, abstract_text, abstract_sections, keywords, take_home, reference, literature, locale
 
 Session object
 

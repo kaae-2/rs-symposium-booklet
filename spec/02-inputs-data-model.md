@@ -21,7 +21,7 @@ Grouping / sessions sheet
 
 Data model
 
-- Abstract: id, title, authors, affiliation, center, contact_email, abstract_text, keywords, take_home, reference, literature, locale.
+- Abstract: id, title, authors, affiliation, center, contact_email, abstract_text, abstract_sections, keywords, take_home, reference, literature, locale.
 - Session: id, title, order, items (id + order).
 - Manifest: event, sessions (minimal; no item map).
 

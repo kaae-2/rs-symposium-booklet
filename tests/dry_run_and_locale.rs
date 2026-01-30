@@ -43,6 +43,7 @@ fn write_markdown_plan_includes_locale_and_paths() {
             center: None,
             contact_email: None,
             abstract_text: "T".to_string(),
+            abstract_sections: Vec::new(),
             keywords: vec![],
             take_home: None,
             reference: None,

@@ -17,6 +17,14 @@ fn truncate_slug(input: &str, max_len: usize) -> String {
     trimmed.to_string()
 }
 
+fn yaml_escape(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace("\r\n", "\\n")
+        .replace('\n', "\\n")
+}
+
 pub fn write_markdown(
     abstracts: &HashMap<String, Abstract>,
     sessions: &[Session],
@@ -100,26 +108,33 @@ pub fn write_markdown(
                 .map_err(|e| anyhow!("Failed to create file {}: {}", path.display(), e))?;
             // write yaml frontmatter
             writeln!(f, "---")?;
-            writeln!(f, "id: \"{}\"", abs.id)?;
-            writeln!(f, "title: \"{}\"", abs.title)?;
+            writeln!(f, "id: \"{}\"", yaml_escape(&abs.id))?;
+            writeln!(f, "title: \"{}\"", yaml_escape(&abs.title))?;
             writeln!(f, "authors:")?;
             for a in abs.authors.iter() {
-                writeln!(f, "  - \"{}\"", a)?;
+                writeln!(f, "  - \"{}\"", yaml_escape(a))?;
             }
             if let Some(aff) = &abs.affiliation {
-                writeln!(f, "affiliation: \"{}\"", aff)?;
+                writeln!(f, "affiliation: \"{}\"", yaml_escape(aff))?;
             }
-            writeln!(f, "session: \"{}\"", session.title)?;
+            writeln!(f, "session: \"{}\"", yaml_escape(&session.title))?;
             writeln!(f, "order: {}", item.order)?;
-            writeln!(f, "locale: \"{}\"", abs.locale)?;
+            writeln!(f, "locale: \"{}\"", yaml_escape(&abs.locale))?;
             if !abs.keywords.is_empty() {
                 writeln!(f, "keywords:")?;
                 for k in abs.keywords.iter() {
-                    writeln!(f, "  - \"{}\"", k)?;
+                    writeln!(f, "  - \"{}\"", yaml_escape(k))?;
                 }
             }
             if let Some(take_home) = &abs.take_home {
-                writeln!(f, "take_home: \"{}\"", take_home)?;
+                writeln!(f, "take_home: \"{}\"", yaml_escape(take_home))?;
+            }
+            if !abs.abstract_sections.is_empty() {
+                writeln!(f, "sections:")?;
+                for section in abs.abstract_sections.iter() {
+                    writeln!(f, "  - label: \"{}\"", yaml_escape(&section.label))?;
+                    writeln!(f, "    text: \"{}\"", yaml_escape(&section.text))?;
+                }
             }
             writeln!(f, "---\n")?;
 

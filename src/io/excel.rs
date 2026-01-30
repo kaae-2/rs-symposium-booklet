@@ -1,6 +1,6 @@
-use crate::model::{Abstract, ItemRef, Session};
-use anyhow::{anyhow, Result};
-use calamine::{open_workbook_auto, Data, Reader};
+use crate::model::{Abstract, AbstractSection, ItemRef, Session};
+use anyhow::{Result, anyhow};
+use calamine::{Data, Reader, open_workbook_auto};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -64,6 +64,48 @@ fn parse_authors_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
         }
         authors.push(parts[0].clone());
         if parts.len() > 1 {
+            let affiliation = parts[parts.len() - 1].clone();
+            if !affiliation.is_empty() && !affiliations.contains(&affiliation) {
+                affiliations.push(affiliation);
+            }
+        }
+    }
+
+    let affiliation = if affiliations.is_empty() {
+        None
+    } else {
+        Some(affiliations.join("; "))
+    };
+
+    (authors, affiliation)
+}
+
+fn parse_presenters_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
+    let normalized = normalize_author_separators(input);
+    let mut authors: Vec<String> = Vec::new();
+    let mut affiliations: Vec<String> = Vec::new();
+
+    for raw in normalized.split(';') {
+        let chunk = raw.trim();
+        if chunk.is_empty() {
+            continue;
+        }
+        let parts: Vec<String> = chunk
+            .split(',')
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty())
+            .map(|p| p.to_string())
+            .collect();
+        if parts.is_empty() {
+            continue;
+        }
+        let author = if parts.len() >= 2 {
+            format!("{}, {}", parts[0], parts[1])
+        } else {
+            parts[0].clone()
+        };
+        authors.push(author);
+        if parts.len() >= 3 {
             let affiliation = parts[parts.len() - 1].clone();
             if !affiliation.is_empty() && !affiliations.contains(&affiliation) {
                 affiliations.push(affiliation);
@@ -164,7 +206,56 @@ fn skip_whitespace(chars: &[(usize, char)], mut idx: usize) -> usize {
     idx
 }
 
-fn clean_abstract_text(input: &str) -> String {
+fn capitalize_label(input: &str) -> String {
+    let mut out = String::new();
+    let mut start_word = true;
+    for ch in input.chars() {
+        if ch.is_whitespace() {
+            start_word = true;
+            out.push(ch);
+            continue;
+        }
+        if start_word {
+            for upper in ch.to_uppercase() {
+                out.push(upper);
+            }
+            start_word = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn normalize_section_label(input: &str) -> String {
+    let trimmed = input.trim();
+    let trimmed = trimmed.trim_end_matches(|c: char| c == ',' || c == '.' || c == ':');
+    let trimmed = trimmed.trim();
+    capitalize_label(trimmed)
+}
+
+fn default_section_label(locale: &str) -> String {
+    if locale.to_lowercase().starts_with("da") {
+        "Resumé".to_string()
+    } else {
+        "Abstract".to_string()
+    }
+}
+
+fn slice_text(input: &str, chars: &[(usize, char)], start_idx: usize, end_idx: usize) -> String {
+    if input.is_empty() || start_idx >= chars.len() {
+        return String::new();
+    }
+    let start_byte = chars[start_idx].0;
+    let end_byte = if end_idx >= chars.len() {
+        input.len()
+    } else {
+        chars[end_idx].0
+    };
+    input[start_byte..end_byte].to_string()
+}
+
+fn split_abstract_sections(input: &str, locale: &str) -> Vec<AbstractSection> {
     let labels = [
         "Baggrund",
         "Formål",
@@ -183,11 +274,14 @@ fn clean_abstract_text(input: &str) -> String {
         "Conclusion",
     ];
     let chars: Vec<(usize, char)> = input.char_indices().collect();
-    let mut out = String::with_capacity(input.len());
+    let mut sections: Vec<AbstractSection> = Vec::new();
     let mut idx = 0;
+    let mut current_start = 0;
+    let mut current_label: Option<String> = None;
+    let default_label = default_section_label(locale);
 
     while idx < chars.len() {
-        let mut matched = None;
+        let mut matched: Option<(String, usize, usize)> = None;
         let mut prev_idx = idx;
         let mut prev_non_ws = None;
         while prev_idx > 0 {
@@ -201,37 +295,100 @@ fn clean_abstract_text(input: &str) -> String {
         let prev_is_boundary = prev_non_ws
             .map(|ch| ch == '/' || ch == ':' || ch == '.' || ch == ',' || ch == ';')
             .unwrap_or(true);
+
         for label in labels.iter() {
             if let Some(after_label) = match_label_at(&chars, idx, label) {
                 let after_space = skip_whitespace(&chars, after_label);
                 let has_space = after_space > after_label;
+                let label_raw = slice_text(input, &chars, idx, after_label);
+                let label_norm = normalize_section_label(&label_raw);
                 if after_space < chars.len() {
                     let delim = chars[after_space].1;
                     if delim == '/' || delim == ':' || delim == '.' || delim == ',' || delim == ';'
                     {
                         let after_delim = skip_whitespace(&chars, after_space + 1);
-                        matched = Some(after_delim);
+                        matched = Some((label_norm, idx, after_delim));
                         break;
                     }
                     if has_space && (delim.is_uppercase() || delim.is_ascii_digit()) {
-                        matched = Some(after_space);
+                        matched = Some((label_norm, idx, after_space));
                         break;
                     }
                     if has_space && prev_is_boundary {
-                        matched = Some(after_space);
+                        matched = Some((label_norm, idx, after_space));
                         break;
                     }
+                } else {
+                    matched = Some((label_norm, idx, after_space));
+                    break;
                 }
             }
         }
-        if let Some(next_idx) = matched {
-            idx = next_idx;
+
+        if let Some((label, label_start, content_start)) = matched {
+            let pre_text = slice_text(input, &chars, current_start, label_start);
+            let pre_text = pre_text.trim().to_string();
+            if let Some(prev_label) = current_label.take() {
+                if !pre_text.is_empty() {
+                    sections.push(AbstractSection {
+                        label: prev_label,
+                        text: pre_text,
+                    });
+                }
+            } else if !pre_text.is_empty() {
+                sections.push(AbstractSection {
+                    label: default_label.clone(),
+                    text: pre_text,
+                });
+            }
+            current_label = Some(label);
+            current_start = content_start;
+            idx = content_start;
             continue;
         }
-        out.push(chars[idx].1);
+
         idx += 1;
     }
-    out
+
+    let tail = if current_start < chars.len() {
+        slice_text(input, &chars, current_start, chars.len())
+    } else {
+        String::new()
+    };
+    let tail = tail.trim().to_string();
+    if let Some(label) = current_label.take() {
+        if !tail.is_empty() {
+            sections.push(AbstractSection { label, text: tail });
+        }
+    } else if !tail.is_empty() {
+        sections.push(AbstractSection {
+            label: default_label,
+            text: tail,
+        });
+    }
+
+    sections
+}
+
+fn sanitize_abstract_text(input: &str) -> String {
+    let mut out = input.to_string();
+    for needle in ["Introduktion /", "introduktion /", "Introduktion", "introduktion"] {
+        out = out.replace(needle, "");
+    }
+    out.trim().to_string()
+}
+
+fn join_section_texts(sections: &[AbstractSection], fallback: &str) -> String {
+    let parts: Vec<String> = sections
+        .iter()
+        .map(|s| s.text.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if parts.is_empty() {
+        fallback.trim().to_string()
+    } else {
+        parts.join("\n\n")
+    }
 }
 
 // Extract parsing of abstracts from a rows buffer into a helper so tests can exercise
@@ -255,6 +412,11 @@ pub fn parse_abstracts_from_rows(
 
     let col_id = find_col(&["id"]).ok_or_else(|| anyhow!("id column not found in abstracts"))?;
     let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
+    let col_presenter = find_col(&[
+        "hvem præsenterer projektet",
+        "præsenterer projektet",
+        "navn, titel",
+    ]);
     let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
     let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
     let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
@@ -286,11 +448,18 @@ pub fn parse_abstracts_from_rows(
             .get(col_authors)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let abstract_text = row
+        let presenter_raw = col_presenter
+            .and_then(|idx| row.get(idx))
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let abstract_text_raw = row
             .get(col_abstract)
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        let abstract_text = clean_abstract_text(&abstract_text);
+        let abstract_text_sanitized = sanitize_abstract_text(&abstract_text_raw);
+        let locale_val = detect_locale(header_row, row);
+        let abstract_sections = split_abstract_sections(&abstract_text_sanitized, &locale_val);
+        let abstract_text = join_section_texts(&abstract_sections, &abstract_text_sanitized);
         let keywords = row
             .get(col_keywords)
             .map(|s| s.trim().to_string())
@@ -331,14 +500,16 @@ pub fn parse_abstracts_from_rows(
             seen.insert(aid.clone(), ridx + 1);
         }
 
-        let (authors_vec, affiliation) = parse_authors_and_affiliation(&authors_raw);
+        let (authors_vec, affiliation) = if !presenter_raw.is_empty() {
+            parse_presenters_and_affiliation(&presenter_raw)
+        } else {
+            parse_authors_and_affiliation(&authors_raw)
+        };
         let keywords_vec = keywords
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-        let locale_val = detect_locale(header_row, row);
-
         abstracts.push(Abstract {
             id: aid.clone(),
             title: title.clone(),
@@ -347,6 +518,7 @@ pub fn parse_abstracts_from_rows(
             center,
             contact_email: contact,
             abstract_text: abstract_text.clone(),
+            abstract_sections,
             keywords: keywords_vec,
             take_home,
             reference,

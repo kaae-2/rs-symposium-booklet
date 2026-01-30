@@ -46,80 +46,19 @@ fn normalize_author_separators(input: &str) -> String {
 fn parse_authors_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
     let normalized = normalize_author_separators(input);
     let mut authors: Vec<String> = Vec::new();
-    let mut affiliations: Vec<String> = Vec::new();
 
     for raw in normalized.split(';') {
         let chunk = raw.trim();
         if chunk.is_empty() {
             continue;
         }
-        let parts: Vec<String> = chunk
-            .split(',')
-            .map(|p| p.trim())
-            .filter(|p| !p.is_empty())
-            .map(|p| p.to_string())
-            .collect();
-        if parts.is_empty() {
-            continue;
-        }
-        authors.push(parts[0].clone());
-        if parts.len() > 1 {
-            let affiliation = parts[parts.len() - 1].clone();
-            if !affiliation.is_empty() && !affiliations.contains(&affiliation) {
-                affiliations.push(affiliation);
-            }
+        let cleaned = chunk.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !cleaned.is_empty() {
+            authors.push(cleaned);
         }
     }
 
-    let affiliation = if affiliations.is_empty() {
-        None
-    } else {
-        Some(affiliations.join("; "))
-    };
-
-    (authors, affiliation)
-}
-
-fn parse_presenters_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
-    let normalized = normalize_author_separators(input);
-    let mut authors: Vec<String> = Vec::new();
-    let mut affiliations: Vec<String> = Vec::new();
-
-    for raw in normalized.split(';') {
-        let chunk = raw.trim();
-        if chunk.is_empty() {
-            continue;
-        }
-        let parts: Vec<String> = chunk
-            .split(',')
-            .map(|p| p.trim())
-            .filter(|p| !p.is_empty())
-            .map(|p| p.to_string())
-            .collect();
-        if parts.is_empty() {
-            continue;
-        }
-        let author = if parts.len() >= 2 {
-            format!("{}, {}", parts[0], parts[1])
-        } else {
-            parts[0].clone()
-        };
-        authors.push(author);
-        if parts.len() >= 3 {
-            let affiliation = parts[parts.len() - 1].clone();
-            if !affiliation.is_empty() && !affiliations.contains(&affiliation) {
-                affiliations.push(affiliation);
-            }
-        }
-    }
-
-    let affiliation = if affiliations.is_empty() {
-        None
-    } else {
-        Some(affiliations.join("; "))
-    };
-
-    (authors, affiliation)
+    (authors, None)
 }
 
 fn push_session(
@@ -501,7 +440,7 @@ pub fn parse_abstracts_from_rows(
         }
 
         let (authors_vec, affiliation) = if !presenter_raw.is_empty() {
-            parse_presenters_and_affiliation(&presenter_raw)
+            parse_authors_and_affiliation(&presenter_raw)
         } else {
             parse_authors_and_affiliation(&authors_raw)
         };

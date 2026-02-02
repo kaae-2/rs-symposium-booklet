@@ -103,7 +103,14 @@
 #set text(size: 8.5pt)
 
 #show outline.entry.where(level: 1): set text(weight: "extrabold")
-#show outline.entry.where(level: 2): set text(weight: "bold")
+#show outline.entry.where(level: 2): set text(style: "italic")
+#show outline.entry.where(level: 3): it => link(
+  it.element.location(),
+  it.indented(
+    it.prefix(),
+    [#par(hanging-indent: 1.5em)[#it.inner()]],
+  ),
+)
 #outline(title: [{{TOC_LABEL}}], depth: 3)
 #pagebreak()
 #set text(size: 10.5pt)

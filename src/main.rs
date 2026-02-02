@@ -1,4 +1,5 @@
 mod cli;
+mod config;
 mod io;
 mod log;
 mod model;

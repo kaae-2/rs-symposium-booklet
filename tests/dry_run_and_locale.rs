@@ -14,6 +14,7 @@ fn parse_rows_detects_locale_column() {
         vec![
             "id".to_string(),
             "title".to_string(),
+            "presenters".to_string(),
             "tema".to_string(),
             "type".to_string(),
             "order".to_string(),
@@ -23,6 +24,7 @@ fn parse_rows_detects_locale_column() {
         vec![
             "a1".to_string(),
             "Title 1".to_string(),
+            "A".to_string(),
             "Miljø".to_string(),
             "Poster".to_string(),
             "1".to_string(),

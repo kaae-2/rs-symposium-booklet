@@ -101,8 +101,9 @@
 ]
 #set par(justify: false, spacing: 2pt)
 #set text(size: 8.5pt)
+
 #show outline.entry.where(level: 1): set text(weight: "bold")
-#outline(title: [{{TOC_LABEL}}], depth: 2, indent: 1.1em)
+#outline(title: [{{TOC_LABEL}}], depth: 2)
 #pagebreak()
 #set text(size: 10.5pt)
 #set par(justify: true)

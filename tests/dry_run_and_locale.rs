@@ -14,12 +14,18 @@ fn parse_rows_detects_locale_column() {
         vec![
             "id".to_string(),
             "title".to_string(),
+            "tema".to_string(),
+            "type".to_string(),
+            "order".to_string(),
             "locale".to_string(),
             "abstract".to_string(),
         ],
         vec![
             "a1".to_string(),
             "Title 1".to_string(),
+            "Miljø".to_string(),
+            "Poster".to_string(),
+            "1".to_string(),
             "en".to_string(),
             "Text 1".to_string(),
         ],
@@ -38,6 +44,9 @@ fn write_markdown_plan_includes_locale_and_paths() {
         Abstract {
             id: "a1".to_string(),
             title: "My Title".to_string(),
+            tema: "Miljø".to_string(),
+            presentation_type: "Poster".to_string(),
+            order: 1,
             presenters: vec!["A".to_string()],
             affiliation: None,
             center: None,
@@ -54,6 +63,8 @@ fn write_markdown_plan_includes_locale_and_paths() {
     let session = Session {
         id: "s1".to_string(),
         title: "Session 1".to_string(),
+        tema: "Miljø".to_string(),
+        presentation_type: "Poster".to_string(),
         order: 1,
         items: vec![ItemRef {
             id: "a1".to_string(),
@@ -93,8 +104,6 @@ fn integration_fixture_runs_binary_dry_run() {
     cmd.args([
         "build",
         "--abstracts",
-        &xlsx_path,
-        "--ordering",
         &xlsx_path,
         "--output",
         out,

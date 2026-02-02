@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 pub struct Abstract {
     pub id: String,
     pub title: String,
+    pub tema: String,
+    pub presentation_type: String,
+    pub order: u32,
     pub presenters: Vec<String>,
     pub affiliation: Option<String>,
     pub center: Option<String>,
@@ -33,6 +36,8 @@ pub struct ItemRef {
 pub struct Session {
     pub id: String,
     pub title: String,
+    pub tema: String,
+    pub presentation_type: String,
     pub order: u32,
     pub items: Vec<ItemRef>,
 }

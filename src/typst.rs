@@ -11,6 +11,9 @@ use std::process::Command;
 struct FrontMatter {
     id: String,
     title: String,
+    tema: Option<String>,
+    #[serde(rename = "type")]
+    presentation_type: Option<String>,
     presenters: Option<Vec<String>>,
     affiliation: Option<String>,
     order: Option<u32>,
@@ -26,6 +29,18 @@ struct AbstractSection {
     label: String,
     text: String,
 }
+
+#[derive(Debug, Clone)]
+struct SessionEntry {
+    title: String,
+    slug: String,
+    tema: String,
+    presentation_type: String,
+    abstracts: Vec<(FrontMatter, String)>,
+}
+
+const TEMA_ORDER: [&str; 3] = ["Miljø", "Teknologi", "Organisation"];
+const TEMA_COLORS: [&str; 3] = ["#0070c0", "#ff0000", "#00b065"];
 
 // Emit typst files by reading `outdir/manifest.json` and per-abstract markdown frontmatter.
 pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -> Result<()> {
@@ -43,26 +58,34 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
     let mf_text = read_to_string(&mf_path)?;
     let mf: JsonValue = serde_json::from_str(&mf_text)?;
 
-    // build a map locale -> Vec<(session_title, Vec<(frontmatter, body)>)>
-    type LocaleSessions = Vec<(String, Vec<(FrontMatter, String)>)>;
-    let mut locales: HashMap<String, LocaleSessions> = HashMap::new();
-
-    if let Some(sessions) = mf.get("sessions").and_then(|s| s.as_array()) {
-        for sess in sessions.iter() {
+    // build session entries from manifest
+    let mut sessions: Vec<SessionEntry> = Vec::new();
+    if let Some(sess_list) = mf.get("sessions").and_then(|s| s.as_array()) {
+        for sess in sess_list.iter() {
             let sess_title = sess
                 .get("title")
                 .and_then(|t| t.as_str())
                 .unwrap_or("")
                 .to_string();
             let sess_slug = sess.get("slug").and_then(|s| s.as_str()).unwrap_or("");
-            if sess_slug.is_empty() {
+            let tema = sess
+                .get("tema")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            let presentation_type = sess
+                .get("type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            if sess_slug.is_empty() || tema.is_empty() || presentation_type.is_empty() {
                 continue;
             }
             let session_dir = Path::new(outdir).join(sess_slug);
             if !session_dir.exists() {
                 continue;
             }
-            // collect markdown files in session dir
+
             let mut abstracts: Vec<(FrontMatter, String)> = Vec::new();
             let mut entries: Vec<_> = read_dir(&session_dir)?.filter_map(|r| r.ok()).collect();
             entries.sort_by_key(|e| e.path());
@@ -72,7 +95,6 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     continue;
                 }
                 let txt = read_to_string(&p)?;
-                // parse frontmatter between first two '---' lines
                 if let Some(start) = txt.find("---")
                     && let Some(rest) = txt[start + 3..].find("---")
                 {
@@ -85,18 +107,47 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 }
             }
 
-            // group abstracts by locale
-            for (fm, body) in abstracts.into_iter() {
-                let locale = fm.locale.clone().unwrap_or_else(|| "en".to_string());
-                let slot = locales.entry(locale).or_default();
-                // find or push session entry
-                if let Some((_, v)) = slot.iter_mut().find(|(t, _)| t == &sess_title) {
-                    v.push((fm, body));
-                } else {
-                    slot.push((sess_title.clone(), vec![(fm, body)]));
-                }
-            }
+            sessions.push(SessionEntry {
+                title: sess_title,
+                slug: sess_slug.to_string(),
+                tema,
+                presentation_type,
+                abstracts,
+            });
         }
+    }
+
+    let mut locales: HashMap<String, Vec<SessionEntry>> = HashMap::new();
+    for locale in locales_csv
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        let mut locale_sessions: Vec<SessionEntry> = Vec::new();
+        for session in sessions.iter() {
+            let abstracts: Vec<(FrontMatter, String)> = session
+                .abstracts
+                .iter()
+                .filter(|(fm, _)| {
+                    fm.locale
+                        .as_deref()
+                        .unwrap_or("en")
+                        .eq_ignore_ascii_case(locale)
+                })
+                .cloned()
+                .collect();
+            if abstracts.is_empty() {
+                continue;
+            }
+            locale_sessions.push(SessionEntry {
+                title: session.title.clone(),
+                slug: session.slug.clone(),
+                tema: session.tema.clone(),
+                presentation_type: session.presentation_type.clone(),
+                abstracts,
+            });
+        }
+        locales.insert(locale.to_string(), locale_sessions);
     }
 
     for locale in locales_csv
@@ -177,38 +228,55 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
         let mut link_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
             std::collections::BTreeMap::new();
         let mut label_state = LabelState::default();
-        let section_colors = ["#0070c0", "#ff0000", "#00b065"];
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             let mut first_session = true;
-            for (sess_idx, (sess_title, abstracts)) in sess_list.iter().enumerate() {
+            let mut current_tema: Option<String> = None;
+            for session in sess_list.iter() {
                 if !first_session {
                     r#gen.push_str("#pagebreak()\n");
                 }
                 first_session = false;
 
-                let sess_title_upper = escape_typst_text(&sess_title.to_uppercase());
-                let sess_color = section_colors[sess_idx % section_colors.len()];
+                let sess_title_upper = escape_typst_text(&session.title.to_uppercase());
+                let sess_color = tema_color(&session.tema);
                 r#gen.push_str(&format!(
                     "#set page(footer: none, header: none)\n#set page(fill: rgb(\"{}\"))\n",
                     sess_color
                 ));
+                r#gen.push_str("#show heading.where(level: 1): it => none\n#show heading.where(level: 2): it => none\n");
+                if current_tema.as_deref() != Some(&session.tema) {
+                    current_tema = Some(session.tema.clone());
+                    r#gen.push_str(&format!(
+                        "#heading(level: 1)[{}]\n",
+                        escape_typst_text(&session.tema)
+                    ));
+                }
+                r#gen.push_str(&format!(
+                    "#heading(level: 2)[{}]\n",
+                    escape_typst_text(&session.presentation_type)
+                ));
                 r#gen.push_str(
                     "#show heading.where(level: 1): it => block(above: 0pt, below: 0pt)[\n  #align(center)[\n    #v(70pt)\n    #text(size: 28pt, weight: \"bold\", font: \"Mari\", fill: white)[#it.body]\n  ]\n]\n",
                 );
-                r#gen.push_str(&format!("= {}\n\n", sess_title_upper));
+                r#gen.push_str(
+                    "#show heading.where(level: 2): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Mari\")\n  #text(fill: brand-navy)[#it.body]\n]\n",
+                );
+                r#gen.push_str(&format!(
+                    "#heading(level: 1, outlined: false)[{}]\n\n",
+                    sess_title_upper
+                ));
                 r#gen.push_str(&format!(
                     "#pagebreak()\n#set page(fill: none, footer: page-footer, header: [#grid(columns: (auto, 1fr), align: (left, right), text(size: 8.5pt, fill: brand-navy)[{}], image(\"/templates/starter/images/Logo_dark.jpg\", height: 6mm))])\n",
                     escape_typst_text(&cover_header_label)
                 ));
-                // sort by order if present
-                let mut abs_sorted = abstracts.clone();
+                let mut abs_sorted = session.abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
                 let abs_len = abs_sorted.len();
                 for (idx, (fm, body)) in abs_sorted.into_iter().enumerate() {
                     let abs_title = escape_typst_text(&fm.title);
                     let abs_label = label_state.next(&fm);
-                    r#gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
+                    r#gen.push_str(&format!("=== {} <{}>\n\n", abs_title, abs_label));
                     // add presenters/affiliation
                     let mut meta_written = false;
                     r#gen.push_str("#set text(size: 8.5pt)\n");
@@ -352,7 +420,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
             if !tag_map.is_empty() {
                 r#gen.push_str("#pagebreak()\n#set page(header: none)\n");
                 r#gen.push_str(
-                    "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Mari\")\n  #text(fill: brand-blue)[#it.body]\n]\n",
+                    "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Mari\")\n  #text(fill: brand-navy)[#it.body]\n]\n",
                 );
                 r#gen.push_str(&format!("= {}\n\n", escape_typst_text(&tag_index_label)));
                 for (tag, titles) in tag_map.iter() {
@@ -472,6 +540,15 @@ fn default_labels() -> HashMap<String, String> {
     );
     m.insert("more_info_link_text".to_string(), "this link".to_string());
     m
+}
+
+fn tema_color(tema: &str) -> &str {
+    for (idx, name) in TEMA_ORDER.iter().enumerate() {
+        if tema == *name {
+            return TEMA_COLORS.get(idx).copied().unwrap_or("#0070c0");
+        }
+    }
+    "#0070c0"
 }
 
 fn escape_typst_text(input: &str) -> String {

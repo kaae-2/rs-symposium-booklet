@@ -25,8 +25,6 @@ fn typst_output_compiles_when_typst_available() {
         "build",
         "--abstracts",
         &xlsx_path,
-        "--ordering",
-        &xlsx_path,
         "--output",
         out,
         "--locales",

@@ -3,7 +3,7 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
-use symposium_booklet::{config, parse_two_workbooks};
+use symposium_booklet::{config, parse_workbook};
 
 fn main() -> anyhow::Result<()> {
     let config_path = config::default_config_path()?;
@@ -19,17 +19,10 @@ fn main() -> anyhow::Result<()> {
             config_path.to_string_lossy()
         )
     })?;
-    let ordering_raw = cfg.ordering.ok_or_else(|| {
-        anyhow::anyhow!(
-            "Missing [symposium].ordering in {}",
-            config_path.to_string_lossy()
-        )
-    })?;
     let abstracts_path = config::resolve_cwd_path(&abstracts_raw)?;
-    let grouping_path = config::resolve_cwd_path(&ordering_raw)?;
 
-    // parse the two explicit workbooks
-    let (abstracts_map, sessions) = match parse_two_workbooks(&abstracts_path, &grouping_path) {
+    // parse the abstracts workbook
+    let (abstracts_map, sessions) = match parse_workbook(&abstracts_path) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error parsing workbooks: {}", e);
@@ -44,8 +37,7 @@ fn main() -> anyhow::Result<()> {
 
     // build JSON object
     let manifest = json!({
-        "sheet_a": {"path": abstracts_path},
-        "sheet_b": {"path": grouping_path},
+        "abstracts": {"path": abstracts_path},
         "summary": {"num_abstracts_parsed": abstracts.len(), "num_sessions": sessions.len()},
         "abstracts": abstracts,
         "sessions": sessions,

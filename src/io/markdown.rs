@@ -57,7 +57,7 @@ pub fn write_markdown(
 
         // sort items by order
         let mut items = session.items.clone();
-        items.sort_by_key(|i| i.order);
+        items.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.id.cmp(&b.id)));
 
         let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for entry in std::fs::read_dir(&session_dir)? {
@@ -110,6 +110,8 @@ pub fn write_markdown(
             writeln!(f, "---")?;
             writeln!(f, "id: \"{}\"", yaml_escape(&abs.id))?;
             writeln!(f, "title: \"{}\"", yaml_escape(&abs.title))?;
+            writeln!(f, "tema: \"{}\"", yaml_escape(&abs.tema))?;
+            writeln!(f, "type: \"{}\"", yaml_escape(&abs.presentation_type))?;
             writeln!(f, "presenters:")?;
             for a in abs.presenters.iter() {
                 writeln!(f, "  - \"{}\"", yaml_escape(a))?;
@@ -118,7 +120,7 @@ pub fn write_markdown(
                 writeln!(f, "affiliation: \"{}\"", yaml_escape(aff))?;
             }
             writeln!(f, "session: \"{}\"", yaml_escape(&session.title))?;
-            writeln!(f, "order: {}", item.order)?;
+            writeln!(f, "order: {}", abs.order)?;
             writeln!(f, "locale: \"{}\"", yaml_escape(&abs.locale))?;
             if !abs.keywords.is_empty() {
                 writeln!(f, "keywords:")?;
@@ -148,6 +150,8 @@ pub fn write_markdown(
         manifest_sessions.push(serde_json::json!({
             "id": session.id,
             "title": session.title,
+            "tema": session.tema,
+            "type": session.presentation_type,
             "slug": slug,
             "order": session.order,
             "count": session.items.len()
@@ -202,7 +206,7 @@ pub fn write_markdown_plan(
         });
 
         let mut items = session.items.clone();
-        items.sort_by_key(|i| i.order);
+        items.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.id.cmp(&b.id)));
 
         let mut used_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for (idx, item) in items.iter().enumerate() {

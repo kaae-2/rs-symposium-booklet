@@ -3,7 +3,7 @@ use crate::model::{Abstract, Session};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
-pub fn validate_inputs(abstracts: Option<String>, ordering: Option<String>) -> Result<()> {
+pub fn validate_inputs(abstracts: Option<String>) -> Result<()> {
     let config_path = default_config_path()?;
     let cfg = load_symposium_config(&config_path)?;
 
@@ -15,20 +15,10 @@ pub fn validate_inputs(abstracts: Option<String>, ordering: Option<String>) -> R
                 config_path.to_string_lossy()
             )
         })?;
-    let ordering = ordering
-        .or_else(|| cfg.as_ref().and_then(|c| c.ordering.clone()))
-        .ok_or_else(|| {
-            anyhow!(
-                "Missing ordering path. Pass --ordering or set [symposium].ordering in {}",
-                config_path.to_string_lossy()
-            )
-        })?;
 
     let abstracts_path = resolve_cwd_path(&abstracts)?;
-    let ordering_path = resolve_cwd_path(&ordering)?;
 
-    let (abstracts, sessions) =
-        crate::io::excel::parse_two_workbooks(&abstracts_path, &ordering_path)?;
+    let (abstracts, sessions) = crate::io::excel::parse_workbook(&abstracts_path)?;
     validate_refs(&abstracts, &sessions)?;
     Ok(())
 }

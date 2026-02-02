@@ -21,16 +21,25 @@ fn duplicate_id_causes_error() {
         vec![
             "ID".to_string(),
             "Title".to_string(),
+            "tema".to_string(),
+            "type".to_string(),
+            "order".to_string(),
             "Abstract".to_string(),
         ],
         vec![
             "a1".to_string(),
             "Title 1".to_string(),
+            "Miljø".to_string(),
+            "Poster".to_string(),
+            "1".to_string(),
             "Text 1".to_string(),
         ],
         vec![
             "a1".to_string(),
             "Title 2".to_string(),
+            "Miljø".to_string(),
+            "Poster".to_string(),
+            "2".to_string(),
             "Text 2".to_string(),
         ],
     ];
@@ -59,6 +68,9 @@ fn slug_collision_appends_suffix() {
         symposium_booklet::model::Abstract {
             id: "a1".to_string(),
             title: "Duplicate".to_string(),
+            tema: "Miljø".to_string(),
+            presentation_type: "Poster".to_string(),
+            order: 1,
             presenters: vec!["A".to_string()],
             affiliation: None,
             center: None,
@@ -75,6 +87,8 @@ fn slug_collision_appends_suffix() {
     let session = symposium_booklet::model::Session {
         id: "s1".to_string(),
         title: "Session 1".to_string(),
+        tema: "Miljø".to_string(),
+        presentation_type: "Poster".to_string(),
         order: 1,
         items: vec![symposium_booklet::model::ItemRef {
             id: "a1".to_string(),

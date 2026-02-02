@@ -4,7 +4,7 @@ Summary
 
 Create a cross-platform Rust CLI `symposium-booklet` that:
 
-- Reads either a single Excel workbook (abstracts + grouping sheets) or a directory containing two `.xlsx` workbooks.
+- Reads a single Excel workbook (abstracts sheet only). When a directory is passed, the first matching `.xlsx` is used.
 - Produces Markdown files with YAML frontmatter organized by session.
 - Generates localized Typst entry files and optionally invokes the local `typst` binary to render an A5 booklet PDF per locale.
 

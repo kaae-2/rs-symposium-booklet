@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize, Default, Clone)]
 pub struct SymposiumConfig {
     pub abstracts: Option<String>,
-    pub ordering: Option<String>,
     pub output: Option<String>,
     pub locales: Option<String>,
     pub template: Option<String>,

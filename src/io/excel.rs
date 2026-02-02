@@ -1,10 +1,12 @@
 use crate::model::{Abstract, AbstractSection, ItemRef, Session};
 use anyhow::{Result, anyhow};
 use calamine::{Data, Reader, open_workbook_auto};
-use std::collections::{HashMap, HashSet};
-use std::env;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+
+const TEMA_ORDER: [&str; 3] = ["Miljø", "Teknologi", "Organisation"];
+const TYPE_ORDER: [&str; 2] = ["Poster", "Mundtlig"];
 
 fn as_str(cell: Option<&Data>) -> String {
     match cell {
@@ -17,51 +19,6 @@ fn as_str(cell: Option<&Data>) -> String {
             Data::Bool(b) => b.to_string(),
             _ => format!("{}", c),
         },
-    }
-}
-
-fn parse_env_file(path: &Path) -> HashMap<String, String> {
-    let mut vars = HashMap::new();
-    let contents = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return vars,
-    };
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        let trimmed = trimmed.strip_prefix("export ").unwrap_or(trimmed);
-        let Some((key, raw_value)) = trimmed.split_once('=') else {
-            continue;
-        };
-        let key = key.trim();
-        if key.is_empty() {
-            continue;
-        }
-        let mut value = raw_value.trim();
-        if value.len() >= 2 {
-            if (value.starts_with('"') && value.ends_with('"'))
-                || (value.starts_with('\'') && value.ends_with('\''))
-            {
-                value = &value[1..value.len() - 1];
-            }
-        }
-        if !value.is_empty() {
-            vars.insert(key.to_string(), value.to_string());
-        }
-    }
-    vars
-}
-
-fn resolve_env_path(dir: &Path, raw: &str) -> String {
-    let path = Path::new(raw);
-    if path.is_absolute() {
-        raw.to_string()
-    } else if path.exists() {
-        raw.to_string()
-    } else {
-        dir.join(path).to_string_lossy().to_string()
     }
 }
 
@@ -82,10 +39,10 @@ fn detect_locale(header_row: &[String], row: &[String]) -> String {
 }
 
 fn normalize_author_separators(input: &str) -> String {
-    let mut normalized = input.to_string();
-    for needle in [" og ", " Og ", " OG "] {
-        normalized = normalized.replace(needle, ";");
-    }
+    let normalized = input.to_string();
+    // for needle in [" og ", " Og ", " OG "] {
+    //     normalized = normalized.replace(needle, ";");
+    // }
 
     let mut out = String::new();
     let mut ws_count = 0usize;
@@ -132,37 +89,60 @@ fn parse_presenters_and_affiliation(input: &str) -> (Vec<String>, Option<String>
     (presenters, None)
 }
 
-fn push_session(
-    sessions: &mut Vec<Session>,
-    seen: &mut HashMap<String, u32>,
-    title: String,
-    items: &mut Vec<ItemRef>,
-) -> Result<()> {
-    if items.is_empty() {
-        return Ok(());
+fn parse_tema(raw: &str, row: usize) -> Result<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Missing tema at row {}", row));
     }
-    let order = sessions.len() as u32 + 1;
-    let base_id = title.clone();
-    let count = seen.entry(base_id.clone()).or_insert(0);
-    *count += 1;
-    let id = if *count == 1 {
-        base_id.clone()
-    } else {
-        format!("{}_{}", base_id, count)
-    };
-    let title = if *count == 1 {
-        title
-    } else {
-        format!("{}_{}", title, count)
-    };
-    sessions.push(Session {
-        id,
-        title,
-        order,
-        items: std::mem::take(items),
-    });
-    Ok(())
+    for allowed in TEMA_ORDER.iter() {
+        if trimmed == *allowed {
+            return Ok(allowed.to_string());
+        }
+    }
+    Err(anyhow!(
+        "Invalid tema '{}' at row {} (expected: Miljø, Teknologi, Organisation)",
+        trimmed,
+        row
+    ))
 }
+
+fn parse_presentation_type(raw: &str, row: usize) -> Result<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Missing type at row {}", row));
+    }
+    for allowed in TYPE_ORDER.iter() {
+        if trimmed == *allowed {
+            return Ok(allowed.to_string());
+        }
+    }
+    Err(anyhow!(
+        "Invalid type '{}' at row {} (expected: Poster, Mundtlig)",
+        trimmed,
+        row
+    ))
+}
+
+fn parse_order(raw: &str, row: usize) -> Result<u32> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("Missing order at row {}", row));
+    }
+    if let Ok(val) = trimmed.parse::<u32>() {
+        return Ok(val);
+    }
+    if let Ok(val) = trimmed.parse::<f64>() {
+        if val.is_finite() && val.fract() == 0.0 && val >= 0.0 {
+            return Ok(val as u32);
+        }
+    }
+    Err(anyhow!(
+        "Invalid order '{}' at row {} (expected integer)",
+        trimmed,
+        row
+    ))
+}
+
 
 pub fn find_header_row(rows: &[Vec<String>], _candidates: &[&str]) -> Option<usize> {
     for (i, row) in rows.iter().take(12).enumerate() {
@@ -521,10 +501,21 @@ pub fn parse_abstracts_from_rows(
         }
         None
     };
+    let find_col_exact = |name: &str| -> Option<usize> {
+        for (j, cell) in header_row.iter().enumerate() {
+            if cell.trim().eq_ignore_ascii_case(name) {
+                return Some(j);
+            }
+        }
+        None
+    };
 
     let col_id = find_col(&["id"]).ok_or_else(|| anyhow!("id column not found in abstracts"))?;
     let col_title = find_col(&["title", "titel"])
         .ok_or_else(|| anyhow!("title column not found in abstracts"))?;
+    let col_tema = find_col_exact("tema").ok_or_else(|| anyhow!("tema column not found in abstracts"))?;
+    let col_type = find_col_exact("type").ok_or_else(|| anyhow!("type column not found in abstracts"))?;
+    let col_order = find_col_exact("order").ok_or_else(|| anyhow!("order column not found in abstracts"))?;
     let col_presenter = find_col(&[
         "hvem præsenterer projektet? navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet).",
         "hvem præsenterer projektet? navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet)",
@@ -563,6 +554,9 @@ pub fn parse_abstracts_from_rows(
             .get(col_title)
             .map(|s| normalize_ws(s))
             .unwrap_or_default();
+        let tema_raw = row.get(col_tema).map(|s| s.trim().to_string()).unwrap_or_default();
+        let type_raw = row.get(col_type).map(|s| s.trim().to_string()).unwrap_or_default();
+        let order_raw = row.get(col_order).map(|s| s.trim().to_string()).unwrap_or_default();
         let presenters_raw = col_presenters
             .and_then(|idx| row.get(idx))
             .map(|s| s.trim().to_string())
@@ -609,10 +603,49 @@ pub fn parse_abstracts_from_rows(
             continue;
         }
 
+        let has_any_ordering = !(tema_raw.trim().is_empty()
+            && type_raw.trim().is_empty()
+            && order_raw.trim().is_empty());
+        let has_all_ordering = !(tema_raw.trim().is_empty()
+            || type_raw.trim().is_empty()
+            || order_raw.trim().is_empty());
+        if !has_any_ordering {
+            continue;
+        }
+        if !has_all_ordering {
+            let warn_id = if aid.is_empty() { "<missing id>" } else { &aid };
+            tracing::warn!(
+                "Row {} (id {}) has partial tema/type/order values",
+                ridx + 1,
+                warn_id
+            );
+        }
+
         if !aid.is_empty() {
             if title.trim().is_empty() {
                 return Err(anyhow!(
                     "Missing title for abstract id {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
+            }
+            if tema_raw.trim().is_empty() {
+                return Err(anyhow!(
+                    "Missing tema for abstract id {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
+            }
+            if type_raw.trim().is_empty() {
+                return Err(anyhow!(
+                    "Missing type for abstract id {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
+            }
+            if order_raw.trim().is_empty() {
+                return Err(anyhow!(
+                    "Missing order for abstract id {} at row {}",
                     aid,
                     ridx + 1
                 ));
@@ -641,6 +674,9 @@ pub fn parse_abstracts_from_rows(
             seen.insert(aid.clone(), ridx + 1);
         }
 
+        let tema = parse_tema(&tema_raw, ridx + 1)?;
+        let presentation_type = parse_presentation_type(&type_raw, ridx + 1)?;
+        let order = parse_order(&order_raw, ridx + 1)?;
         let (presenters_vec, affiliation) = if !presenter_raw.is_empty() {
             parse_presenters_and_affiliation(&presenter_raw)
         } else {
@@ -654,6 +690,9 @@ pub fn parse_abstracts_from_rows(
         abstracts.push(Abstract {
             id: aid.clone(),
             title: title.clone(),
+            tema,
+            presentation_type,
+            order,
             presenters: presenters_vec,
             affiliation,
             center,
@@ -679,28 +718,53 @@ pub fn parse_abstracts_from_rows(
     Ok(abstract_map)
 }
 
-fn find_sheet_by_substr(path: &str, subs: &[&str]) -> Result<String> {
-    let wb = open_workbook_auto(path).map_err(|e| anyhow!("open failed: {}", e))?;
-    for name in wb.sheet_names() {
-        let low = name.to_lowercase();
-        for &s in subs {
-            if low.contains(&s.to_lowercase()) {
-                return Ok(name.clone());
+fn build_sessions_from_abstracts(abstracts: &HashMap<String, Abstract>) -> Vec<Session> {
+    let mut sessions: Vec<Session> = Vec::new();
+    let mut order_counter: u32 = 1;
+
+    for tema in TEMA_ORDER.iter() {
+        for presentation_type in TYPE_ORDER.iter() {
+            let mut grouped: Vec<&Abstract> = abstracts
+                .values()
+                .filter(|a| a.tema == *tema && a.presentation_type == *presentation_type)
+                .collect();
+            if grouped.is_empty() {
+                continue;
             }
+            grouped.sort_by(|a, b| {
+                a.order
+                    .cmp(&b.order)
+                    .then_with(|| a.id.cmp(&b.id))
+                    .then_with(|| a.title.cmp(&b.title))
+            });
+
+            let items: Vec<ItemRef> = grouped
+                .iter()
+                .map(|a| ItemRef {
+                    id: a.id.clone(),
+                    order: a.order,
+                })
+                .collect();
+
+            let title = format!("{} - {}", tema, presentation_type);
+            sessions.push(Session {
+                id: title.clone(),
+                title,
+                tema: tema.to_string(),
+                presentation_type: presentation_type.to_string(),
+                order: order_counter,
+                items,
+            });
+            order_counter += 1;
         }
     }
-    // fallback to first sheet
-    wb.sheet_names()
-        .first()
-        .cloned()
-        .ok_or_else(|| anyhow!("no sheets in workbook {}", path))
+
+    sessions
 }
 
 pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Session>)> {
-    // if `path` is a directory, find two xlsx files and parse accordingly
-    if Path::new(path).is_dir() {
-        let input_dir = Path::new(path);
-        let mut xls = Vec::new();
+    let source_path = if Path::new(path).is_dir() {
+        let mut xls: Vec<String> = Vec::new();
         for entry in fs::read_dir(path)? {
             let e = entry?;
             let p = e.path();
@@ -718,114 +782,43 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
         if xls.is_empty() {
             return Err(anyhow!("No .xlsx files found in directory {}", path));
         }
-        let mut env_overrides: HashMap<String, String> = HashMap::new();
-        if let Ok(val) = env::var("SYMPOSIUM_ABSTRACTS") {
-            env_overrides.insert("SYMPOSIUM_ABSTRACTS".to_string(), val);
-        }
-        if let Ok(val) = env::var("SYMPOSIUM_GROUPING") {
-            env_overrides.insert("SYMPOSIUM_GROUPING".to_string(), val);
-        }
-        if env_overrides.get("SYMPOSIUM_ABSTRACTS").is_none()
-            || env_overrides.get("SYMPOSIUM_GROUPING").is_none()
+        xls.sort();
+        if let Some(found) = xls
+            .iter()
+            .find(|f| f.to_lowercase().contains("with_ids") || f.to_lowercase().contains("abstract"))
         {
-            let env_path = input_dir.join(".env");
-            if env_path.exists() {
-                let file_vars = parse_env_file(&env_path);
-                if env_overrides.get("SYMPOSIUM_ABSTRACTS").is_none() {
-                    if let Some(val) = file_vars.get("SYMPOSIUM_ABSTRACTS") {
-                        env_overrides.insert("SYMPOSIUM_ABSTRACTS".to_string(), val.clone());
-                    }
-                }
-                if env_overrides.get("SYMPOSIUM_GROUPING").is_none() {
-                    if let Some(val) = file_vars.get("SYMPOSIUM_GROUPING") {
-                        env_overrides.insert("SYMPOSIUM_GROUPING".to_string(), val.clone());
-                    }
-                }
-            }
+            found.clone()
+        } else {
+            xls.first().cloned().ok_or_else(|| anyhow!("failed to choose abstracts file"))?
         }
+    } else {
+        path.to_string()
+    };
 
-        // prefer with_ids.xlsx as abstracts file
-        let mut file_a = None::<String>;
-        let mut file_b = None::<String>;
-        if let Some(val) = env_overrides.get("SYMPOSIUM_ABSTRACTS") {
-            file_a = Some(resolve_env_path(input_dir, val));
-        }
-        if let Some(val) = env_overrides.get("SYMPOSIUM_GROUPING") {
-            file_b = Some(resolve_env_path(input_dir, val));
-        }
-        for f in &xls {
-            if file_a.is_none()
-                && (f.to_lowercase().contains("with_ids")
-                    || f.to_lowercase().contains("afsluttede"))
-            {
-                file_a = Some(f.clone())
-            }
-            if file_b.is_none()
-                && (f.to_lowercase().contains("kopi")
-                    || f.to_lowercase().contains("grupper")
-                    || f.to_lowercase().contains("final"))
-            {
-                file_b = Some(f.clone());
-            }
-        }
-        if file_a.is_none() {
-            file_a = xls.first().cloned();
-        }
-        if file_b.is_none() {
-            if xls.len() > 1 {
-                file_b = xls.get(1).cloned();
-            } else {
-                file_b = file_a.clone();
-            }
-        }
-        let file_a = file_a.ok_or_else(|| anyhow!("failed to choose abstracts file"))?;
-        let file_b = file_b.ok_or_else(|| anyhow!("failed to choose grouping file"))?;
-
-        // now parse abstracts from file_a and sessions from file_b
-        return parse_two_workbooks(&file_a, &file_b);
-    }
-
-    // existing single-workbook logic (both sheets in one workbook)
-    let mut wb = open_workbook_auto(path).map_err(|e| anyhow!("Failed to open workbook: {}", e))?;
-
-    // identify candidate sheet names
+    let mut wb =
+        open_workbook_auto(&source_path).map_err(|e| anyhow!("Failed to open workbook: {}", e))?;
     let names = wb.sheet_names().to_owned();
     if names.is_empty() {
         return Err(anyhow!("Workbook has no sheets"));
     }
 
-    // heuristics for abstracts/session sheets (case-insensitive)
     let mut abstracts_sheet: Option<String> = None;
-    let mut sessions_sheet: Option<String> = None;
     for n in &names {
         let low = n.to_lowercase();
-        if abstracts_sheet.is_none()
-            && (low.contains("afsluttede")
-                || low.contains("abstract")
-                || low.contains("afsluttet")
-                || low.contains("resum"))
+        if low.contains("afsluttede")
+            || low.contains("abstract")
+            || low.contains("afsluttet")
+            || low.contains("resum")
         {
             abstracts_sheet = Some(n.clone());
-        }
-        if sessions_sheet.is_none()
-            && (low.contains("gruppering")
-                || low.contains("grupper")
-                || low.contains("poster")
-                || low.contains("session")
-                || low.contains("include"))
-        {
-            sessions_sheet = Some(n.clone());
+            break;
         }
     }
-
     let abstracts_sheet = abstracts_sheet.ok_or_else(|| {
         anyhow!("No abstracts sheet found (tried matching 'afsluttede','abstract','resum')")
     })?;
-    let sessions_sheet = sessions_sheet.ok_or_else(|| anyhow!("No sessions/include sheet found (tried matching 'gruppering','poster','session','include')"))?;
 
     tracing::info!("Parsing abstracts sheet: {}", abstracts_sheet);
-
-    // load rows for abstracts sheet
     let range = wb
         .worksheet_range(&abstracts_sheet)
         .map_err(|e| anyhow!("Failed to get range for sheet {}: {}", abstracts_sheet, e))?;
@@ -834,244 +827,10 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
         rows_a.push(r.iter().map(|c| as_str(Some(c))).collect());
     }
 
-    // detect header row
     let header_idx = find_header_row(&rows_a, &[])
         .ok_or_else(|| anyhow!("Could not detect header row in abstracts sheet"))?;
     let abstract_map = parse_abstracts_from_rows(&rows_a, header_idx)?;
-
-    // parse sessions sheet using flexible heuristics (header rows vs item rows)
-    tracing::info!("Parsing sessions sheet: {}", sessions_sheet);
-    let range_b = wb
-        .worksheet_range(&sessions_sheet)
-        .map_err(|e| anyhow!("Failed to get range for sheet {}: {}", sessions_sheet, e))?;
-    let mut rows_b: Vec<Vec<String>> = Vec::new();
-    for r in range_b.rows() {
-        rows_b.push(r.iter().map(|c| as_str(Some(c))).collect());
-    }
-
-    // try to detect a header row (first non-empty row with 'id' or 'abstract')
-    let mut sessions: Vec<Session> = Vec::new();
-    let mut seen_session_ids: HashMap<String, u32> = HashMap::new();
-    let mut current_session_title = None::<String>;
-    let mut current_items: Vec<ItemRef> = Vec::new();
-    let mut item_counter = 1u32;
-
-    // helper to flush current session
-    let flush_session = |sessions: &mut Vec<Session>,
-                         seen: &mut HashMap<String, u32>,
-                         title: Option<String>,
-                         items: &mut Vec<ItemRef>|
-     -> Result<()> {
-        let title = title.unwrap_or_else(|| "(unnamed)".to_string());
-        push_session(sessions, seen, title, items)
-    };
-
-    for row in rows_b.iter() {
-        if row.iter().all(|c| c.trim().is_empty()) {
-            continue;
-        }
-        // try to find any token that looks like an abstract id present in abstract_map
-        let mut found_ids: Vec<String> = Vec::new();
-        for c in row.iter() {
-            if c.trim().is_empty() {
-                continue;
-            }
-            let token = c.trim();
-            if abstract_map.contains_key(token) {
-                found_ids.push(token.to_string());
-                continue;
-            }
-            for part in token.replace(';', ",").split(',').map(|s| s.trim()) {
-                if abstract_map.contains_key(part) {
-                    found_ids.push(part.to_string());
-                }
-            }
-        }
-
-        if !found_ids.is_empty() {
-            // this row contains item(s)
-            if current_session_title.is_none() {
-                current_session_title = Some("(unnamed)".to_string());
-            }
-            for fid in found_ids.into_iter() {
-                current_items.push(ItemRef {
-                    id: fid,
-                    order: item_counter,
-                });
-                item_counter += 1;
-            }
-        } else {
-            // treat as session header
-            // flush previous
-            flush_session(
-                &mut sessions,
-                &mut seen_session_ids,
-                current_session_title.take(),
-                &mut current_items,
-            )?;
-            // set new title
-            let textcells: Vec<String> = row
-                .iter()
-                .filter(|c| !c.trim().is_empty())
-                .cloned()
-                .collect();
-            let title = textcells.join(" ").trim().to_string();
-            current_session_title = Some(if title.is_empty() {
-                "(unnamed)".to_string()
-            } else {
-                title
-            });
-            item_counter = 1;
-        }
-    }
-    // flush last
-    flush_session(
-        &mut sessions,
-        &mut seen_session_ids,
-        current_session_title.take(),
-        &mut current_items,
-    )?;
-
-    // determine referenced set
-    let mut referenced: HashSet<String> = HashSet::new();
-    for s in &sessions {
-        for it in &s.items {
-            referenced.insert(it.id.clone());
-        }
-    }
-
-    // Unreferenced abstracts are not added to an automatic session.
-
-    Ok((abstract_map, sessions))
-}
-
-pub fn parse_two_workbooks(
-    file_a: &str,
-    file_b: &str,
-) -> Result<(HashMap<String, Abstract>, Vec<Session>)> {
-    tracing::info!(
-        "Parsing abstracts from {} and sessions from {}",
-        file_a,
-        file_b
-    );
-    // load rows A
-    let sheet_a = find_sheet_by_substr(file_a, &["afsluttede", "abstract"])?;
-    let range_a = open_workbook_auto(file_a)?
-        .worksheet_range(&sheet_a)
-        .map_err(|e| anyhow!("Failed to read sheet {} from {}: {}", sheet_a, file_a, e))?;
-    let mut rows_a: Vec<Vec<String>> = Vec::new();
-    for r in range_a.rows() {
-        rows_a.push(r.iter().map(|c| as_str(Some(c))).collect());
-    }
-
-    let header_idx = find_header_row(&rows_a, &[])
-        .ok_or_else(|| anyhow!("Could not detect header row in abstracts sheet"))?;
-    let abstract_map = parse_abstracts_from_rows(&rows_a, header_idx)?;
-
-    // load rows B
-    let sheet_b = match find_sheet_by_substr(file_b, &["gruppering", "grupper", "poster"]) {
-        Ok(s) => s,
-        Err(_) => match open_workbook_auto(file_b) {
-            Ok(wb) => wb
-                .sheet_names()
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "Sheet1".to_string()),
-            Err(_) => "Sheet1".to_string(),
-        },
-    };
-    let range_b = open_workbook_auto(file_b)?
-        .worksheet_range(&sheet_b)
-        .map_err(|e| anyhow!("Failed to read sheet {} from {}: {}", sheet_b, file_b, e))?;
-    let mut rows_b: Vec<Vec<String>> = Vec::new();
-    for r in range_b.rows() {
-        rows_b.push(r.iter().map(|c| as_str(Some(c))).collect());
-    }
-
-    // parse sessions from rows_b (same heuristics as single workbook case)
-    let mut sessions: Vec<Session> = Vec::new();
-    let mut seen_session_ids: HashMap<String, u32> = HashMap::new();
-    let mut current_session_title = None::<String>;
-    let mut current_items: Vec<ItemRef> = Vec::new();
-    let mut item_counter = 1u32;
-
-    let flush_session = |sessions: &mut Vec<Session>,
-                         seen: &mut HashMap<String, u32>,
-                         title: Option<String>,
-                         items: &mut Vec<ItemRef>|
-     -> Result<()> {
-        let title = title.unwrap_or_else(|| "(unnamed)".to_string());
-        push_session(sessions, seen, title, items)
-    };
-
-    for row in rows_b.iter() {
-        if row.iter().all(|c| c.trim().is_empty()) {
-            continue;
-        }
-        let mut found_ids: Vec<String> = Vec::new();
-        for c in row.iter() {
-            if c.trim().is_empty() {
-                continue;
-            }
-            let token = c.trim();
-            if abstract_map.contains_key(token) {
-                found_ids.push(token.to_string());
-                continue;
-            }
-            for part in token.replace(';', ",").split(',').map(|s| s.trim()) {
-                if abstract_map.contains_key(part) {
-                    found_ids.push(part.to_string());
-                }
-            }
-        }
-
-        if !found_ids.is_empty() {
-            if current_session_title.is_none() {
-                current_session_title = Some("(unnamed)".to_string());
-            }
-            for fid in found_ids.into_iter() {
-                current_items.push(ItemRef {
-                    id: fid,
-                    order: item_counter,
-                });
-                item_counter += 1;
-            }
-        } else {
-            flush_session(
-                &mut sessions,
-                &mut seen_session_ids,
-                current_session_title.take(),
-                &mut current_items,
-            )?;
-            let textcells: Vec<String> = row
-                .iter()
-                .filter(|c| !c.trim().is_empty())
-                .cloned()
-                .collect();
-            let title = textcells.join(" ").trim().to_string();
-            current_session_title = Some(if title.is_empty() {
-                "(unnamed)".to_string()
-            } else {
-                title
-            });
-            item_counter = 1;
-        }
-    }
-    flush_session(
-        &mut sessions,
-        &mut seen_session_ids,
-        current_session_title.take(),
-        &mut current_items,
-    )?;
-
-    // determine referenced set and add Unassigned for unreferenced
-    let mut referenced: HashSet<String> = HashSet::new();
-    for s in &sessions {
-        for it in &s.items {
-            referenced.insert(it.id.clone());
-        }
-    }
-    // Unreferenced abstracts are not added to an automatic session.
+    let sessions = build_sessions_from_abstracts(&abstract_map);
 
     Ok((abstract_map, sessions))
 }

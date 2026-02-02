@@ -19,15 +19,6 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
                 config_path.to_string_lossy()
             )
         })?;
-    let ordering = opts
-        .ordering
-        .or_else(|| cfg.as_ref().and_then(|c| c.ordering.clone()))
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Missing ordering path. Pass --ordering or set [symposium].ordering in {}",
-                config_path.to_string_lossy()
-            )
-        })?;
     let output = opts
         .output
         .or_else(|| cfg.as_ref().and_then(|c| c.output.clone()))
@@ -40,30 +31,27 @@ pub fn run_build(opts: BuildOpts) -> Result<()> {
         .or_else(|| cfg.as_ref().and_then(|c| c.typst_bin.clone()));
 
     let abstracts_path = resolve_cwd_path(&abstracts)?;
-    let ordering_path = resolve_cwd_path(&ordering)?;
     let output_path = resolve_cwd_path(&output)?;
 
     // if user passed an option to emit parse JSON, handle it here
     if opts.dry_run {
         tracing::info!(
-            "Dry run: validating abstracts={} ordering={}",
-            abstracts_path,
-            ordering_path
+            "Dry run: validating abstracts={}",
+            abstracts_path
         );
     } else {
         tracing::info!(
-            "Building with abstracts={} ordering={} output={}",
+            "Building with abstracts={} output={}",
             abstracts_path,
-            ordering_path,
             output_path
         );
     }
 
     // validate input (parse + reference checks)
-    crate::validation::validate_inputs(Some(abstracts), Some(ordering))?;
+    crate::validation::validate_inputs(Some(abstracts))?;
 
     // parse excel (again to obtain values for the build path)
-    let (abstracts, sessions) = excel::parse_two_workbooks(&abstracts_path, &ordering_path)?;
+    let (abstracts, sessions) = excel::parse_workbook(&abstracts_path)?;
 
     // In dry-run mode, collect a plan of actions instead of writing files
     let mut plan = plan::Plan::default();

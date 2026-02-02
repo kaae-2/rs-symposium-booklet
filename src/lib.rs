@@ -6,4 +6,4 @@ pub mod model;
 pub mod typst;
 pub mod validation;
 
-pub use io::excel::{parse_two_workbooks, parse_workbook};
+pub use io::excel::parse_workbook;

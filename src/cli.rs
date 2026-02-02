@@ -35,10 +35,6 @@ pub enum Commands {
         /// Abstracts workbook (.xlsx)
         #[arg(long)]
         abstracts: Option<String>,
-
-        /// Ordering/grouping workbook (.xlsx)
-        #[arg(long)]
-        ordering: Option<String>,
     },
 }
 
@@ -47,10 +43,6 @@ pub struct BuildOpts {
     /// Abstracts workbook (.xlsx)
     #[arg(long)]
     pub abstracts: Option<String>,
-
-    /// Ordering/grouping workbook (.xlsx)
-    #[arg(long)]
-    pub ordering: Option<String>,
 
     /// Output directory
     #[arg(long)]

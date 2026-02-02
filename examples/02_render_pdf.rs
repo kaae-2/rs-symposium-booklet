@@ -5,7 +5,6 @@ fn main() -> anyhow::Result<()> {
 
     let mut args = std::env::args().skip(1);
     let abstracts_arg = args.next();
-    let ordering_arg = args.next();
     let output_arg = args.next();
     let locales = args.next().unwrap_or_else(|| "da".to_string());
 
@@ -20,21 +19,12 @@ fn main() -> anyhow::Result<()> {
                 config_path.to_string_lossy()
             )
         })?;
-    let ordering = ordering_arg
-        .or_else(|| cfg.as_ref().and_then(|c| c.ordering.clone()))
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Missing ordering path. Pass arg or set [symposium].ordering in {}",
-                config_path.to_string_lossy()
-            )
-        })?;
     let output = output_arg
         .or_else(|| cfg.as_ref().and_then(|c| c.output.clone()))
         .unwrap_or_else(|| "out/example-render".to_string());
 
     let opts = BuildOpts {
         abstracts: Some(abstracts),
-        ordering: Some(ordering),
         output: Some(output.clone()),
         template: None,
         locales: locales.clone(),

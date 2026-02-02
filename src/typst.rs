@@ -270,6 +270,9 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     "#pagebreak()\n#set page(fill: none, footer: page-footer, header: [#grid(columns: (auto, 1fr), align: (left, right), text(size: 8.5pt, fill: brand-navy)[{}], image(\"/templates/starter/images/Logo_dark.jpg\", height: 6mm))])\n",
                     escape_typst_text(&cover_header_label)
                 ));
+                r#gen.push_str(
+                    "#show heading.where(level: 3): it => block(above: 8pt, below: 10pt)[\n  #set text(size: 11.5pt, weight: \"semibold\", font: \"Mari\")\n  #text(fill: brand-navy)[#it.body]\n]\n",
+                );
                 let mut abs_sorted = session.abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
                 let abs_len = abs_sorted.len();

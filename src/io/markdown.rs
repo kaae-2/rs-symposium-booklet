@@ -110,8 +110,8 @@ pub fn write_markdown(
             writeln!(f, "---")?;
             writeln!(f, "id: \"{}\"", yaml_escape(&abs.id))?;
             writeln!(f, "title: \"{}\"", yaml_escape(&abs.title))?;
-            writeln!(f, "authors:")?;
-            for a in abs.authors.iter() {
+            writeln!(f, "presenters:")?;
+            for a in abs.presenters.iter() {
                 writeln!(f, "  - \"{}\"", yaml_escape(a))?;
             }
             if let Some(aff) = &abs.affiliation {
@@ -128,6 +128,9 @@ pub fn write_markdown(
             }
             if let Some(take_home) = &abs.take_home {
                 writeln!(f, "take_home: \"{}\"", yaml_escape(take_home))?;
+            }
+            if let Some(reference) = &abs.reference {
+                writeln!(f, "reference: \"{}\"", yaml_escape(reference))?;
             }
             if !abs.abstract_sections.is_empty() {
                 writeln!(f, "sections:")?;

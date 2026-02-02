@@ -8,7 +8,7 @@ Primary commands
 
 Flags and behavior
 
-- `--input` accepts a single workbook path or a directory containing `.xlsx` files. For a directory, the parser prefers `with_ids`/`afsluttede` for abstracts and `kopi`/`grupper`/`final` for sessions; otherwise it falls back to the first two files.
+- `--input` accepts a single workbook path or a directory containing `.xlsx` files. For a directory, the parser prefers `_editswith_ids`/`afsluttede` for abstracts and `kopi`/`grupper`/`final` for sessions; otherwise it falls back to the first two files.
 - `--output` directory is wiped and recreated on `build` (dry-run reports the delete action).
 - `--template` is currently used only for reporting in dry-run plans; Typst output uses the built-in minimal template.
 - `--locales` default `en,da`.

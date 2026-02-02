@@ -59,7 +59,7 @@ fn slug_collision_appends_suffix() {
         symposium_booklet::model::Abstract {
             id: "a1".to_string(),
             title: "Duplicate".to_string(),
-            authors: vec!["A".to_string()],
+            presenters: vec!["A".to_string()],
             affiliation: None,
             center: None,
             contact_email: None,

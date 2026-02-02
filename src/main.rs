@@ -19,6 +19,8 @@ fn main() -> Result<()> {
             crate::typst::maybe_run_typst(&output, &locales, typst_bin.as_deref())?;
             Ok(())
         }
-        cli::Commands::Validate { input } => crate::validation::validate_input(&input),
+        cli::Commands::Validate { abstracts, ordering } => {
+            crate::validation::validate_inputs(abstracts, ordering)
+        }
     }
 }

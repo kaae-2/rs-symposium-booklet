@@ -15,10 +15,10 @@ Abstracts sheet
 - Header row detection scans the first 12 rows for an `id` column and a `title`/`abstract`/`resum` column.
 - Required column: `id`.
 - Column detection (case-insensitive substrings):
-  - title/titel, authors/author/forfatter, abstract/resum
+  - title/titel, presenters/author/forfatter, abstract/resum
   - keywords/nøgle/emne ord
   - take home/take-home
-  - reference/published/doi
+  - reference/published/doi (including "reference hvis studiet er publiceret" and "link eller DOI")
   - literature/litterature/references
   - center/centre
   - email/kontakt/contact
@@ -28,11 +28,12 @@ Abstracts sheet
 - Section labels are normalized by trimming whitespace and stripping trailing commas, periods, and colons.
 - If the abstract starts without a known label, a default label is inserted (locale-based: `Resumé` for `da`, `Abstract` otherwise).
 - Locale defaults to `da`.
+- Reference values are normalized to a clean URL by extracting the first link or DOI.
 
-Authors parsing
+Presenters parsing
 
-- Authors are split on `;` or `og`.
-- Each author entry is split by comma; the first segment is the author name and the last segment becomes a unique affiliation entry.
+- Presenters are split on `;` or `og`.
+- Each presenter entry is split by comma; the first segment is the presenter name and the last segment becomes a unique affiliation entry.
 
 Grouping/session sheet
 
@@ -61,7 +62,7 @@ Parse JSON format
 
 Abstract object (serialized)
 
-- id, title, authors, affiliation, center, contact_email, abstract_text, abstract_sections, keywords, take_home, reference, literature, locale
+- id, title, presenters, affiliation, center, contact_email, abstract_text, abstract_sections, keywords, take_home, reference, literature, locale
 
 Session object
 

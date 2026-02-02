@@ -23,7 +23,9 @@ fn typst_output_compiles_when_typst_available() {
     let mut cmd = cargo_bin_cmd!("symposium-booklet");
     cmd.args([
         "build",
-        "--input",
+        "--abstracts",
+        &xlsx_path,
+        "--ordering",
         &xlsx_path,
         "--output",
         out,
@@ -37,6 +39,8 @@ fn typst_output_compiles_when_typst_available() {
     let status = StdCommand::new("typst")
         .env("TYPST_FONT_PATHS", "templates/starter/fonts/TTF")
         .arg("compile")
+        .arg("--root")
+        .arg(".")
         .arg(&typst_file)
         .arg(&pdf_path)
         .status()

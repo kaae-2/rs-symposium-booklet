@@ -2,6 +2,7 @@ use crate::model::{Abstract, AbstractSection, ItemRef, Session};
 use anyhow::{Result, anyhow};
 use calamine::{Data, Reader, open_workbook_auto};
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fs;
 use std::path::Path;
 
@@ -16,6 +17,51 @@ fn as_str(cell: Option<&Data>) -> String {
             Data::Bool(b) => b.to_string(),
             _ => format!("{}", c),
         },
+    }
+}
+
+fn parse_env_file(path: &Path) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+    let contents = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return vars,
+    };
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let trimmed = trimmed.strip_prefix("export ").unwrap_or(trimmed);
+        let Some((key, raw_value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        let mut value = raw_value.trim();
+        if value.len() >= 2 {
+            if (value.starts_with('"') && value.ends_with('"'))
+                || (value.starts_with('\'') && value.ends_with('\''))
+            {
+                value = &value[1..value.len() - 1];
+            }
+        }
+        if !value.is_empty() {
+            vars.insert(key.to_string(), value.to_string());
+        }
+    }
+    vars
+}
+
+fn resolve_env_path(dir: &Path, raw: &str) -> String {
+    let path = Path::new(raw);
+    if path.is_absolute() {
+        raw.to_string()
+    } else if path.exists() {
+        raw.to_string()
+    } else {
+        dir.join(path).to_string_lossy().to_string()
     }
 }
 
@@ -40,12 +86,37 @@ fn normalize_author_separators(input: &str) -> String {
     for needle in [" og ", " Og ", " OG "] {
         normalized = normalized.replace(needle, ";");
     }
-    normalized
+
+    let mut out = String::new();
+    let mut ws_count = 0usize;
+    for ch in normalized.chars() {
+        if ch.is_whitespace() {
+            ws_count += 1;
+            continue;
+        }
+        if ws_count > 0 {
+            if ws_count >= 2 {
+                out.push(';');
+            } else {
+                out.push(' ');
+            }
+            ws_count = 0;
+        }
+        out.push(ch);
+    }
+    if ws_count > 0 {
+        if ws_count >= 2 {
+            out.push(';');
+        } else {
+            out.push(' ');
+        }
+    }
+    out
 }
 
-fn parse_authors_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
+fn parse_presenters_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
     let normalized = normalize_author_separators(input);
-    let mut authors: Vec<String> = Vec::new();
+    let mut presenters: Vec<String> = Vec::new();
 
     for raw in normalized.split(';') {
         let chunk = raw.trim();
@@ -54,11 +125,11 @@ fn parse_authors_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
         }
         let cleaned = chunk.split_whitespace().collect::<Vec<_>>().join(" ");
         if !cleaned.is_empty() {
-            authors.push(cleaned);
+            presenters.push(cleaned);
         }
     }
 
-    (authors, None)
+    (presenters, None)
 }
 
 fn push_session(
@@ -199,15 +270,21 @@ fn split_abstract_sections(input: &str, locale: &str) -> Vec<AbstractSection> {
         "Baggrund",
         "Formål",
         "Metode og materiale",
+        "Metode og materialer",
+        "Metode",
         "Resultater",
         "Diskussion",
+        "Konklusion og perspektiver",
+        "Konklusion og perspektivering",
         "Konklusion",
+        "Perspektivering",
         "Background",
         "Objective",
         "Aim",
         "Purpose",
         "Methods and materials",
         "Materials and methods",
+        "Methods",
         "Results",
         "Discussion",
         "Conclusion",
@@ -223,24 +300,37 @@ fn split_abstract_sections(input: &str, locale: &str) -> Vec<AbstractSection> {
         let mut matched: Option<(String, usize, usize)> = None;
         let mut prev_idx = idx;
         let mut prev_non_ws = None;
+        let mut saw_line_break = false;
         while prev_idx > 0 {
             prev_idx -= 1;
             let ch = chars[prev_idx].1;
+            if ch == '\n' || ch == '\r' {
+                saw_line_break = true;
+            }
             if !ch.is_whitespace() {
                 prev_non_ws = Some(ch);
                 break;
             }
         }
-        let prev_is_boundary = prev_non_ws
-            .map(|ch| ch == '/' || ch == ':' || ch == '.' || ch == ',' || ch == ';')
-            .unwrap_or(true);
+        let prev_is_boundary = saw_line_break
+            || prev_non_ws
+                .map(|ch| ch == '/' || ch == ':' || ch == '.' || ch == ',' || ch == ';')
+                .unwrap_or(true);
+        let at_boundary = idx == 0 || prev_is_boundary;
 
+        if !at_boundary {
+            idx += 1;
+            continue;
+        }
         for label in labels.iter() {
             if let Some(after_label) = match_label_at(&chars, idx, label) {
                 let after_space = skip_whitespace(&chars, after_label);
                 let has_space = after_space > after_label;
                 let label_raw = slice_text(input, &chars, idx, after_label);
-                let label_norm = normalize_section_label(&label_raw);
+                let mut label_norm = normalize_section_label(&label_raw);
+                if locale.to_lowercase().starts_with("da") {
+                    label_norm = label_norm.replace(" Og ", " og ");
+                }
                 if after_space < chars.len() {
                     let delim = chars[after_space].1;
                     if delim == '/' || delim == ':' || delim == '.' || delim == ',' || delim == ';'
@@ -310,24 +400,102 @@ fn split_abstract_sections(input: &str, locale: &str) -> Vec<AbstractSection> {
 }
 
 fn sanitize_abstract_text(input: &str) -> String {
-    let mut out = input.to_string();
-    for needle in ["Introduktion /", "introduktion /", "Introduktion", "introduktion"] {
-        out = out.replace(needle, "");
-    }
-    out.trim().to_string()
+    input.trim().to_string()
 }
 
-fn join_section_texts(sections: &[AbstractSection], fallback: &str) -> String {
-    let parts: Vec<String> = sections
-        .iter()
-        .map(|s| s.text.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    if parts.is_empty() {
-        fallback.trim().to_string()
-    } else {
-        parts.join("\n\n")
+fn trim_url_punctuation(input: &str) -> String {
+    let mut out = input
+        .trim()
+        .trim_matches(|c: char| matches!(c, '<' | '>' | '(' | ')' | '[' | ']' | '"' | '\''))
+        .to_string();
+    loop {
+        let trimmed = out.trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':'));
+        if trimmed.len() == out.len() {
+            break;
+        }
+        out = trimmed.to_string();
     }
+    out
+}
+
+fn extract_url_from(input: &str) -> Option<String> {
+    let lower = input.to_lowercase();
+    if let Some(pos) = lower.find("https://") {
+        let token = input[pos..].split_whitespace().next().unwrap_or("");
+        let url = trim_url_punctuation(token);
+        if !url.is_empty() {
+            return Some(url);
+        }
+    }
+    if let Some(pos) = lower.find("http://") {
+        let token = input[pos..].split_whitespace().next().unwrap_or("");
+        let url = trim_url_punctuation(token);
+        if !url.is_empty() {
+            return Some(url);
+        }
+    }
+    if let Some(pos) = lower.find("www.") {
+        let token = input[pos..].split_whitespace().next().unwrap_or("");
+        let url = trim_url_punctuation(token);
+        if !url.is_empty() {
+            return Some(format!("https://{}", url));
+        }
+    }
+    None
+}
+
+fn extract_doi_token(input: &str) -> Option<String> {
+    let mut out = String::new();
+    for ch in input.chars() {
+        if ch.is_whitespace() {
+            break;
+        }
+        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '/' | '_' | ';' | '(' | ')') {
+            out.push(ch);
+            continue;
+        }
+        if ch == ':' && out.is_empty() {
+            continue;
+        }
+        break;
+    }
+    while out.ends_with(|c: char| matches!(c, '.' | ',' | ';' | ':' | ')')) {
+        out.pop();
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
+
+fn extract_doi(input: &str) -> Option<String> {
+    let lower = input.to_lowercase();
+    if let Some(pos) = lower.find("doi.org/") {
+        let after = &input[pos + "doi.org/".len()..];
+        return extract_doi_token(after);
+    }
+    if let Some(pos) = lower.find("doi:") {
+        let after = &input[pos + "doi:".len()..];
+        if let Some(token) = extract_doi_token(after) {
+            return Some(token);
+        }
+    }
+    if let Some(pos) = lower.find("10.") {
+        let after = &input[pos..];
+        return extract_doi_token(after);
+    }
+    None
+}
+
+fn extract_reference_link(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(url) = extract_url_from(trimmed) {
+        return Some(url);
+    }
+    if let Some(doi) = extract_doi(trimmed) {
+        return Some(format!("https://doi.org/{}", doi));
+    }
+    None
 }
 
 // Extract parsing of abstracts from a rows buffer into a helper so tests can exercise
@@ -336,12 +504,17 @@ pub fn parse_abstracts_from_rows(
     rows_a: &[Vec<String>],
     header_idx: usize,
 ) -> Result<HashMap<String, Abstract>> {
+    let normalize_ws =
+        |input: &str| -> String { input.split_whitespace().collect::<Vec<_>>().join(" ") };
     let header_row = &rows_a[header_idx];
-    let lower_row: Vec<String> = header_row.iter().map(|s| s.to_lowercase()).collect();
+    let lower_row: Vec<String> = header_row
+        .iter()
+        .map(|s| normalize_ws(s).to_lowercase())
+        .collect();
     let find_col = |subs: &[&str]| -> Option<usize> {
         for (j, cell) in lower_row.iter().enumerate() {
             for &s in subs {
-                if cell.contains(&s.to_lowercase()) {
+                if cell.contains(&normalize_ws(s).to_lowercase()) {
                     return Some(j);
                 }
             }
@@ -350,23 +523,33 @@ pub fn parse_abstracts_from_rows(
     };
 
     let col_id = find_col(&["id"]).ok_or_else(|| anyhow!("id column not found in abstracts"))?;
-    let col_title = find_col(&["title", "titel"]).unwrap_or(col_id + 1);
+    let col_title = find_col(&["title", "titel"])
+        .ok_or_else(|| anyhow!("title column not found in abstracts"))?;
     let col_presenter = find_col(&[
+        "hvem præsenterer projektet? navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet).",
+        "hvem præsenterer projektet? navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet)",
+        "hvem præsenterer projektet? navn, titel, tilhørsforhold",
         "hvem præsenterer projektet",
         "præsenterer projektet",
-        "navn, titel",
     ]);
-    let col_authors = find_col(&["authors", "author", "forfatter"]).unwrap_or(col_title + 1);
-    let col_abstract = find_col(&["abstract", "resum", "resumé"]).unwrap_or(col_title + 2);
-    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"])
-        .unwrap_or(col_abstract + 1);
-    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"])
-        .unwrap_or(col_keywords + 1);
-    let col_reference = find_col(&["reference", "published", "doi"]).unwrap_or(col_takehome + 1);
-    let col_literature = find_col(&["litterature", "literature", "references", "literatur"])
-        .unwrap_or(col_reference + 1);
-    let col_center = find_col(&["center", "centre", "center/centre"]).unwrap_or(col_authors + 1);
-    let col_contact = find_col(&["email", "kontakt", "contact"]).unwrap_or(col_authors + 2);
+    let col_presenters = find_col(&["presenter", "presenters", "authors", "author", "forfatter"]);
+    if col_presenter.is_none() && col_presenters.is_none() {
+        return Err(anyhow!("presenters column not found in abstracts"));
+    }
+    let col_abstract = find_col(&["abstract", "resum", "resumé"])
+        .ok_or_else(|| anyhow!("abstract column not found in abstracts"))?;
+    let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"]);
+    let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"]);
+    let col_reference = find_col(&[
+        "reference",
+        "published",
+        "doi",
+        "reference hvis studiet er publiceret",
+        "link eller doi",
+    ]);
+    let col_literature = find_col(&["litterature", "literature", "references", "literatur"]);
+    let col_center = find_col(&["center", "centre", "center/centre"]);
+    let col_contact = find_col(&["email", "kontakt", "contact"]);
 
     let mut abstracts: Vec<Abstract> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
@@ -375,16 +558,13 @@ pub fn parse_abstracts_from_rows(
         if row.iter().all(|c| c.trim().is_empty()) {
             continue;
         }
-        let aid = row
-            .get(col_id)
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
+        let aid = row.get(col_id).map(|s| normalize_ws(s)).unwrap_or_default();
         let title = row
             .get(col_title)
-            .map(|s| s.trim().to_string())
+            .map(|s| normalize_ws(s))
             .unwrap_or_default();
-        let authors_raw = row
-            .get(col_authors)
+        let presenters_raw = col_presenters
+            .and_then(|idx| row.get(idx))
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
         let presenter_raw = col_presenter
@@ -398,30 +578,31 @@ pub fn parse_abstracts_from_rows(
         let abstract_text_sanitized = sanitize_abstract_text(&abstract_text_raw);
         let locale_val = detect_locale(header_row, row);
         let abstract_sections = split_abstract_sections(&abstract_text_sanitized, &locale_val);
-        let abstract_text = join_section_texts(&abstract_sections, &abstract_text_sanitized);
-        let keywords = row
-            .get(col_keywords)
-            .map(|s| s.trim().to_string())
+        let abstract_text = abstract_text_raw.trim().to_string();
+        let keywords = col_keywords
+            .and_then(|idx| row.get(idx))
+            .map(|s| normalize_ws(s))
             .unwrap_or_default();
-        let take_home = row
-            .get(col_takehome)
-            .map(|s| s.trim().to_string())
+        let take_home = col_takehome
+            .and_then(|idx| row.get(idx))
+            .map(|s| normalize_ws(s))
             .filter(|s| !s.is_empty());
-        let reference = row
-            .get(col_reference)
-            .map(|s| s.trim().to_string())
+        let reference_raw = col_reference
+            .and_then(|idx| row.get(idx))
+            .map(|s| normalize_ws(s))
+            .unwrap_or_default();
+        let reference = extract_reference_link(&reference_raw);
+        let literature = col_literature
+            .and_then(|idx| row.get(idx))
+            .map(|s| normalize_ws(s))
             .filter(|s| !s.is_empty());
-        let literature = row
-            .get(col_literature)
-            .map(|s| s.trim().to_string())
+        let center = col_center
+            .and_then(|idx| row.get(idx))
+            .map(|s| normalize_ws(s))
             .filter(|s| !s.is_empty());
-        let center = row
-            .get(col_center)
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
-        let contact = row
-            .get(col_contact)
-            .map(|s| s.trim().to_string())
+        let contact = col_contact
+            .and_then(|idx| row.get(idx))
+            .map(|s| normalize_ws(s))
             .filter(|s| !s.is_empty());
 
         if aid.is_empty() && title.is_empty() && abstract_text.is_empty() {
@@ -429,6 +610,27 @@ pub fn parse_abstracts_from_rows(
         }
 
         if !aid.is_empty() {
+            if title.trim().is_empty() {
+                return Err(anyhow!(
+                    "Missing title for abstract id {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
+            }
+            if presenter_raw.trim().is_empty() && presenters_raw.trim().is_empty() {
+                return Err(anyhow!(
+                    "Missing presenters for abstract id {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
+            }
+            if abstract_text_raw.trim().is_empty() {
+                return Err(anyhow!(
+                    "Missing abstract text for abstract id {} at row {}",
+                    aid,
+                    ridx + 1
+                ));
+            }
             if seen.contains_key(&aid) {
                 return Err(anyhow!(
                     "Duplicate abstract id found: {} at row {}",
@@ -439,10 +641,10 @@ pub fn parse_abstracts_from_rows(
             seen.insert(aid.clone(), ridx + 1);
         }
 
-        let (authors_vec, affiliation) = if !presenter_raw.is_empty() {
-            parse_authors_and_affiliation(&presenter_raw)
+        let (presenters_vec, affiliation) = if !presenter_raw.is_empty() {
+            parse_presenters_and_affiliation(&presenter_raw)
         } else {
-            parse_authors_and_affiliation(&authors_raw)
+            parse_presenters_and_affiliation(&presenters_raw)
         };
         let keywords_vec = keywords
             .split(',')
@@ -452,7 +654,7 @@ pub fn parse_abstracts_from_rows(
         abstracts.push(Abstract {
             id: aid.clone(),
             title: title.clone(),
-            authors: authors_vec,
+            presenters: presenters_vec,
             affiliation,
             center,
             contact_email: contact,
@@ -497,6 +699,7 @@ fn find_sheet_by_substr(path: &str, subs: &[&str]) -> Result<String> {
 pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Session>)> {
     // if `path` is a directory, find two xlsx files and parse accordingly
     if Path::new(path).is_dir() {
+        let input_dir = Path::new(path);
         let mut xls = Vec::new();
         for entry in fs::read_dir(path)? {
             let e = entry?;
@@ -515,16 +718,52 @@ pub fn parse_workbook(path: &str) -> Result<(HashMap<String, Abstract>, Vec<Sess
         if xls.is_empty() {
             return Err(anyhow!("No .xlsx files found in directory {}", path));
         }
+        let mut env_overrides: HashMap<String, String> = HashMap::new();
+        if let Ok(val) = env::var("SYMPOSIUM_ABSTRACTS") {
+            env_overrides.insert("SYMPOSIUM_ABSTRACTS".to_string(), val);
+        }
+        if let Ok(val) = env::var("SYMPOSIUM_GROUPING") {
+            env_overrides.insert("SYMPOSIUM_GROUPING".to_string(), val);
+        }
+        if env_overrides.get("SYMPOSIUM_ABSTRACTS").is_none()
+            || env_overrides.get("SYMPOSIUM_GROUPING").is_none()
+        {
+            let env_path = input_dir.join(".env");
+            if env_path.exists() {
+                let file_vars = parse_env_file(&env_path);
+                if env_overrides.get("SYMPOSIUM_ABSTRACTS").is_none() {
+                    if let Some(val) = file_vars.get("SYMPOSIUM_ABSTRACTS") {
+                        env_overrides.insert("SYMPOSIUM_ABSTRACTS".to_string(), val.clone());
+                    }
+                }
+                if env_overrides.get("SYMPOSIUM_GROUPING").is_none() {
+                    if let Some(val) = file_vars.get("SYMPOSIUM_GROUPING") {
+                        env_overrides.insert("SYMPOSIUM_GROUPING".to_string(), val.clone());
+                    }
+                }
+            }
+        }
+
         // prefer with_ids.xlsx as abstracts file
         let mut file_a = None::<String>;
         let mut file_b = None::<String>;
+        if let Some(val) = env_overrides.get("SYMPOSIUM_ABSTRACTS") {
+            file_a = Some(resolve_env_path(input_dir, val));
+        }
+        if let Some(val) = env_overrides.get("SYMPOSIUM_GROUPING") {
+            file_b = Some(resolve_env_path(input_dir, val));
+        }
         for f in &xls {
-            if f.to_lowercase().contains("with_ids") || f.to_lowercase().contains("afsluttede") {
-                file_a = Some(f.clone());
+            if file_a.is_none()
+                && (f.to_lowercase().contains("with_ids")
+                    || f.to_lowercase().contains("afsluttede"))
+            {
+                file_a = Some(f.clone())
             }
-            if f.to_lowercase().contains("kopi")
-                || f.to_lowercase().contains("grupper")
-                || f.to_lowercase().contains("final")
+            if file_b.is_none()
+                && (f.to_lowercase().contains("kopi")
+                    || f.to_lowercase().contains("grupper")
+                    || f.to_lowercase().contains("final"))
             {
                 file_b = Some(f.clone());
             }

@@ -32,20 +32,29 @@ pub enum Commands {
     },
     /// Validate input files without writing output
     Validate {
-        /// Input workbook or directory
-        input: String,
+        /// Abstracts workbook (.xlsx)
+        #[arg(long)]
+        abstracts: Option<String>,
+
+        /// Ordering/grouping workbook (.xlsx)
+        #[arg(long)]
+        ordering: Option<String>,
     },
 }
 
 #[derive(clap::Args, Clone)]
 pub struct BuildOpts {
-    /// Input workbook (.xlsx) or directory
+    /// Abstracts workbook (.xlsx)
     #[arg(long)]
-    pub input: String,
+    pub abstracts: Option<String>,
+
+    /// Ordering/grouping workbook (.xlsx)
+    #[arg(long)]
+    pub ordering: Option<String>,
 
     /// Output directory
     #[arg(long)]
-    pub output: String,
+    pub output: Option<String>,
 
     /// Template directory override
     #[arg(long)]

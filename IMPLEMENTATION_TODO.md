@@ -8,8 +8,8 @@ Concrete next work items to move the project from the current implementation to 
 Remaining work (ordered by priority)
 
 Priority 1 — Tests and fixtures (medium)
-- Add committed `.xlsx` fixtures (5–10 rows) or expand the generator to cover author parsing/affiliation derivation and long-title slug truncation.
-- Add unit tests for author parsing (`;` and `og`) and affiliation extraction rules.
+- Add committed `.xlsx` fixtures (5–10 rows) or expand the generator to cover presenter parsing/affiliation derivation and long-title slug truncation.
+- Add unit tests for presenter parsing (`;` and `og`) and affiliation extraction rules.
 - Add tests that validate emitted `.typ` structure (TOC/index blocks, label escaping, tag index linking).
 
 Priority 2 — UX polish (low)

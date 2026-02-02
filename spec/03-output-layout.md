@@ -14,8 +14,8 @@ Build behavior
 Markdown file convention
 
 - YAML frontmatter fields:
-  - `id`, `title`, `authors` (array), `affiliation` (optional), `session`, `order`, `locale`
-  - Optional: `keywords` (array), `take_home`, `sections` (array of `{label,text}`)
+  - `id`, `title`, `presenters` (array), `affiliation` (optional), `session`, `order`, `locale`
+  - Optional: `keywords` (array), `take_home`, `reference`, `sections` (array of `{label,text}`)
 - Body: abstract text joined from section bodies (labels removed).
 - Filenames: slugify title and prepend four-digit order within session (e.g., `0001-my-talk.md`). Ensure uniqueness by appending `-1`, `-2` if slugs collide. Slugs are ASCII-only and truncated to avoid Windows path length issues (session slug ~60 chars, title slug ~80 chars).
 
@@ -29,6 +29,7 @@ Index and keywords
 
 - If `keywords` are provided in abstracts, Typst builds a tag index at the end of the booklet.
 - The tag index is emitted as a level-1 heading so it appears in the table of contents.
+- If `reference` links are provided, Typst adds a link index after the tag index. Each entry shows the full URL and links back to the referenced abstracts.
 
 Localization
 

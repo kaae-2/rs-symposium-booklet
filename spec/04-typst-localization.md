@@ -13,6 +13,7 @@ Book layout
 - Table of contents uses a Danish heading (`Indholdsfortegnelse`) followed by an outline title from `toc_label`.
 - The tag index section is a level-1 heading (from `tag_index_label`) so it appears in the ToC.
 - Abstract titles are link targets; the tag index links to abstracts with page numbers.
+- A link index section (from `link_index_label`) appears after the tag index when references are present.
 
 Typst binary invocation
 

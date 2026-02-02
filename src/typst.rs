@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
-use std::fs::{create_dir_all, read_dir, read_to_string, File};
+use std::fs::{File, create_dir_all, read_dir, read_to_string};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -11,12 +11,13 @@ use std::process::Command;
 struct FrontMatter {
     id: String,
     title: String,
-    authors: Option<Vec<String>>,
+    presenters: Option<Vec<String>>,
     affiliation: Option<String>,
     order: Option<u32>,
     locale: Option<String>,
     keywords: Option<Vec<String>>,
     take_home: Option<String>,
+    reference: Option<String>,
     sections: Option<Vec<AbstractSection>>,
 }
 
@@ -128,14 +129,26 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
             .get("tag_index_label")
             .cloned()
             .unwrap_or_else(|| "Tag index".to_string());
-        let authors_label = labels
-            .get("authors_label")
+        let link_index_label = labels
+            .get("link_index_label")
             .cloned()
-            .unwrap_or_else(|| "Authors".to_string());
+            .unwrap_or_else(|| "Links".to_string());
+        // let presenters_label = labels
+        //     .get("presenters_label")
+        //     .cloned()
+        //     .unwrap_or_else(|| "Presenters".to_string());
         let affiliation_label = labels
             .get("affiliation_label")
             .cloned()
             .unwrap_or_else(|| "Affiliation".to_string());
+        let more_info_prefix = labels
+            .get("more_info_prefix")
+            .cloned()
+            .unwrap_or_else(|| "For more info, click".to_string());
+        let more_info_link_text = labels
+            .get("more_info_link_text")
+            .cloned()
+            .unwrap_or_else(|| "this link".to_string());
         let cover_header_label = labels
             .get("cover_header")
             .cloned()
@@ -161,23 +174,33 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
         let mut r#gen = String::new();
         let mut keyword_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
             std::collections::BTreeMap::new();
+        let mut link_map: std::collections::BTreeMap<String, Vec<(String, String)>> =
+            std::collections::BTreeMap::new();
         let mut label_state = LabelState::default();
+        let section_colors = ["#0070c0", "#ff0000", "#00b065"];
 
         if let Some(sess_list) = locales.get(locale).or_else(|| locales.get("en")) {
             let mut first_session = true;
-            for (sess_title, abstracts) in sess_list {
+            for (sess_idx, (sess_title, abstracts)) in sess_list.iter().enumerate() {
                 if !first_session {
                     r#gen.push_str("#pagebreak()\n");
                 }
                 first_session = false;
 
                 let sess_title_upper = escape_typst_text(&sess_title.to_uppercase());
-                r#gen.push_str("#set page(footer: none, header: none)\n#set page(fill: brand-blue)\n");
+                let sess_color = section_colors[sess_idx % section_colors.len()];
+                r#gen.push_str(&format!(
+                    "#set page(footer: none, header: none)\n#set page(fill: rgb(\"{}\"))\n",
+                    sess_color
+                ));
                 r#gen.push_str(
                     "#show heading.where(level: 1): it => block(above: 0pt, below: 0pt)[\n  #align(center)[\n    #v(70pt)\n    #text(size: 28pt, weight: \"bold\", font: \"Mari\", fill: white)[#it.body]\n  ]\n]\n",
                 );
                 r#gen.push_str(&format!("= {}\n\n", sess_title_upper));
-                r#gen.push_str("#pagebreak()\n#set page(fill: none, footer: page-footer, header: [#align(right)[#image(\"/templates/starter/images/Logo_dark.jpg\", height: 6mm)]])\n");
+                r#gen.push_str(&format!(
+                    "#pagebreak()\n#set page(fill: none, footer: page-footer, header: [#grid(columns: (auto, 1fr), align: (left, right), text(size: 8.5pt, fill: brand-navy)[{}], image(\"/templates/starter/images/Logo_dark.jpg\", height: 6mm))])\n",
+                    escape_typst_text(&cover_header_label)
+                ));
                 // sort by order if present
                 let mut abs_sorted = abstracts.clone();
                 abs_sorted.sort_by_key(|(fm, _)| fm.order.unwrap_or(0));
@@ -186,20 +209,22 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     let abs_title = escape_typst_text(&fm.title);
                     let abs_label = label_state.next(&fm);
                     r#gen.push_str(&format!("== {} <{}>\n\n", abs_title, abs_label));
-                    // add authors/affiliation
+                    // add presenters/affiliation
                     let mut meta_written = false;
                     r#gen.push_str("#set text(size: 8.5pt)\n");
-                    if let Some(auths) = &fm.authors {
-                        let joined = auths.join(", ");
-                        r#gen.push_str(&format!(
-                            "*{}*: {}\n",
-                            escape_typst_text(&authors_label),
-                            escape_typst_text(&joined)
-                        ));
+                    if let Some(presenters) = &fm.presenters {
+                        for (p_idx, presenter) in presenters.iter().enumerate() {
+                            r#gen.push_str(&format!("#emph[{}]", escape_typst_text(presenter)));
+                            if p_idx + 1 < presenters.len() {
+                                r#gen.push_str(" #linebreak()\n");
+                            } else {
+                                r#gen.push_str("\n");
+                            }
+                        }
                         meta_written = true;
                     }
                     if let Some(aff) = &fm.affiliation {
-                        if fm.authors.is_some() {
+                        if fm.presenters.is_some() {
                             r#gen.push_str("#v(6pt)\n");
                         }
                         let affiliations = unique_list(aff);
@@ -259,6 +284,21 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                             escape_typst_text(&take_home_label),
                             escape_typst_text(take_home)
                         ));
+                    }
+                    if let Some(reference) = fm.reference.as_ref().map(|s| s.trim()) {
+                        if !reference.is_empty() {
+                            link_map
+                                .entry(reference.to_string())
+                                .or_default()
+                                .push((fm.title.clone(), abs_label.clone()));
+                            r#gen.push_str("#v(8pt)\n");
+                            r#gen.push_str(&format!(
+                                "#set text(size: 8.5pt)\n{} #underline[#text(fill: brand-navy)[#link(\"{}\")[{}]]]\n",
+                                escape_typst_text(&more_info_prefix),
+                                escape_typst_string(reference),
+                                escape_typst_text(&more_info_link_text)
+                            ));
+                        }
                     }
                     if let Some(tags) = &fm.keywords {
                         let formatted = format_tags(tags);
@@ -339,6 +379,38 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
             }
         }
 
+        if !link_map.is_empty() {
+            r#gen.push_str("#pagebreak()\n#set page(header: none)\n");
+            r#gen.push_str(
+                "#show heading.where(level: 1): it => block(above: 10pt, below: 10pt)[\n  #set text(size: 13pt, weight: \"bold\", font: \"Mari\")\n  #text(fill: brand-blue)[#it.body]\n]\n",
+            );
+            r#gen.push_str(&format!("= {}\n\n", escape_typst_text(&link_index_label)));
+            for (url, titles) in link_map.iter() {
+                let mut uniq = titles.clone();
+                uniq.sort_by(|a, b| a.0.cmp(&b.0));
+                uniq.dedup_by(|a, b| a.1 == b.1);
+                let internal_links: Vec<String> = uniq
+                    .iter()
+                    .map(|(title, label)| {
+                        let title_text = escape_typst_text(title);
+                        let anchor = format!(
+                            "#link(<{}>)[{}] (#context counter(page).at(<{}>).at(0))",
+                            label, title_text, label
+                        );
+                        format!("#underline[#text(fill: brand-navy)[{}]]", anchor)
+                    })
+                    .collect();
+                let url_text = escape_typst_text(url);
+                let url_link = format!(
+                    "#underline[#text(fill: brand-navy)[#link(\"{}\")[{}]]]",
+                    escape_typst_string(url),
+                    url_text
+                );
+                r#gen.push_str(&format!("- {}: {}\n", url_link, internal_links.join("; ")));
+            }
+            r#gen.push('\n');
+        }
+
         // Build a minimal validated Typst document to avoid template/comment
         // interpolation issues. This produces consistent output and is easy
         // to extend later with richer templates.
@@ -372,13 +444,14 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
 fn default_labels() -> HashMap<String, String> {
     let mut m = HashMap::new();
     m.insert("title".to_string(), "Symposium 2026".to_string());
-    m.insert("authors_label".to_string(), "Authors".to_string());
+    m.insert("presenters_label".to_string(), "Presenters".to_string());
     m.insert("affiliation_label".to_string(), "Affiliation".to_string());
     m.insert("toc_label".to_string(), "Table of contents".to_string());
     m.insert("index_label".to_string(), "Index".to_string());
     m.insert("take_home_label".to_string(), "Take-home".to_string());
     m.insert("tags_label".to_string(), "Tags".to_string());
     m.insert("tag_index_label".to_string(), "Tag index".to_string());
+    m.insert("link_index_label".to_string(), "Links".to_string());
     m.insert(
         "cover_header".to_string(),
         "Interprofessional Education Symposium 2026".to_string(),
@@ -393,6 +466,11 @@ fn default_labels() -> HashMap<String, String> {
         "cover_subtitle".to_string(),
         "The impact of intelligence on learning and guidance".to_string(),
     );
+    m.insert(
+        "more_info_prefix".to_string(),
+        "For more info, click".to_string(),
+    );
+    m.insert("more_info_link_text".to_string(), "this link".to_string());
     m
 }
 
@@ -407,6 +485,10 @@ fn escape_typst_text(input: &str) -> String {
         .replace(']', "\\]")
         .replace('{', "\\{")
         .replace('}', "\\}")
+}
+
+fn escape_typst_string(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn unique_list(input: &str) -> Vec<String> {
@@ -521,8 +603,8 @@ fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
     if let Some(t) = v.get("title").and_then(|s| s.as_str()) {
         m.insert("title".to_string(), t.to_string());
     }
-    if let Some(a) = v.get("authors_label").and_then(|s| s.as_str()) {
-        m.insert("authors_label".to_string(), a.to_string());
+    if let Some(a) = v.get("presenters_label").and_then(|s| s.as_str()) {
+        m.insert("presenters_label".to_string(), a.to_string());
     }
     if let Some(a) = v.get("affiliation_label").and_then(|s| s.as_str()) {
         m.insert("affiliation_label".to_string(), a.to_string());
@@ -542,6 +624,9 @@ fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
     if let Some(t) = v.get("tag_index_label").and_then(|s| s.as_str()) {
         m.insert("tag_index_label".to_string(), t.to_string());
     }
+    if let Some(t) = v.get("link_index_label").and_then(|s| s.as_str()) {
+        m.insert("link_index_label".to_string(), t.to_string());
+    }
     if let Some(t) = v.get("cover_header").and_then(|s| s.as_str()) {
         m.insert("cover_header".to_string(), t.to_string());
     }
@@ -556,6 +641,12 @@ fn load_locale_labels(locale: &str) -> Result<HashMap<String, String>> {
     }
     if let Some(t) = v.get("cover_subtitle").and_then(|s| s.as_str()) {
         m.insert("cover_subtitle".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("more_info_prefix").and_then(|s| s.as_str()) {
+        m.insert("more_info_prefix".to_string(), t.to_string());
+    }
+    if let Some(t) = v.get("more_info_link_text").and_then(|s| s.as_str()) {
+        m.insert("more_info_link_text".to_string(), t.to_string());
     }
     Ok(m)
 }

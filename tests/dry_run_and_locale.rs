@@ -38,7 +38,7 @@ fn write_markdown_plan_includes_locale_and_paths() {
         Abstract {
             id: "a1".to_string(),
             title: "My Title".to_string(),
-            authors: vec!["A".to_string()],
+            presenters: vec!["A".to_string()],
             affiliation: None,
             center: None,
             contact_email: None,
@@ -90,7 +90,16 @@ fn integration_fixture_runs_binary_dry_run() {
     let _ = fs::remove_dir_all(out);
 
     let mut cmd = cargo_bin_cmd!("symposium-booklet");
-    cmd.args(["build", "--input", &xlsx_path, "--output", out, "--dry-run"]);
+    cmd.args([
+        "build",
+        "--abstracts",
+        &xlsx_path,
+        "--ordering",
+        &xlsx_path,
+        "--output",
+        out,
+        "--dry-run",
+    ]);
     let assert = cmd.assert().success();
     let outstr = String::from_utf8(assert.get_output().stdout.clone()).unwrap_or_default();
     assert!(outstr.contains("DRY-RUN PLAN"));

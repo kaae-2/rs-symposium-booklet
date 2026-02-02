@@ -3,17 +3,33 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::Path;
 
-use symposium_booklet::parse_two_workbooks;
+use symposium_booklet::{config, parse_two_workbooks};
 
-fn main() {
-    // Require explicit file paths via cargo env vars; fail early if missing
-    let abstracts_path = option_env!("SYMPOSIUM_ABSTRACTS")
-        .expect("SYMPOSIUM_ABSTRACTS must be set in .cargo/config.toml");
-    let grouping_path = option_env!("SYMPOSIUM_GROUPING")
-        .expect("SYMPOSIUM_GROUPING must be set in .cargo/config.toml");
+fn main() -> anyhow::Result<()> {
+    let config_path = config::default_config_path()?;
+    let cfg = config::load_symposium_config(&config_path)?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Missing [symposium] config in {}",
+            config_path.to_string_lossy()
+        )
+    })?;
+    let abstracts_raw = cfg.abstracts.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Missing [symposium].abstracts in {}",
+            config_path.to_string_lossy()
+        )
+    })?;
+    let ordering_raw = cfg.ordering.ok_or_else(|| {
+        anyhow::anyhow!(
+            "Missing [symposium].ordering in {}",
+            config_path.to_string_lossy()
+        )
+    })?;
+    let abstracts_path = config::resolve_cwd_path(&abstracts_raw)?;
+    let grouping_path = config::resolve_cwd_path(&ordering_raw)?;
 
     // parse the two explicit workbooks
-    let (abstracts_map, sessions) = match parse_two_workbooks(abstracts_path, grouping_path) {
+    let (abstracts_map, sessions) = match parse_two_workbooks(&abstracts_path, &grouping_path) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Error parsing workbooks: {}", e);
@@ -56,4 +72,5 @@ fn main() {
             std::process::exit(1);
         }
     }
+    Ok(())
 }

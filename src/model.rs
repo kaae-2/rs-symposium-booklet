@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct Abstract {
     pub id: String,
     pub title: String,
-    pub authors: Vec<String>,
+    pub presenters: Vec<String>,
     pub affiliation: Option<String>,
     pub center: Option<String>,
     pub contact_email: Option<String>,

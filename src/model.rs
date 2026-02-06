@@ -16,7 +16,7 @@ pub struct Abstract {
     pub keywords: Vec<String>,
     pub take_home: Option<String>,
     pub reference: Option<String>,
-    pub literature: Option<String>,
+    pub bibliography: Vec<String>,
     pub locale: String,
 }
 

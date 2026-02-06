@@ -80,7 +80,7 @@ fn slug_collision_appends_suffix() {
             keywords: vec![],
             take_home: None,
             reference: None,
-            literature: None,
+            bibliography: vec![],
             locale: "en".to_string(),
         },
     );

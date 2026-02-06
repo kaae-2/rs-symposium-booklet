@@ -21,6 +21,7 @@ struct FrontMatter {
     keywords: Option<Vec<String>>,
     take_home: Option<String>,
     reference: Option<String>,
+    bibliography: Option<Vec<String>>,
     sections: Option<Vec<AbstractSection>>,
 }
 
@@ -238,7 +239,24 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 }
                 first_session = false;
 
-                let sess_title_upper = escape_typst_text(&session.title.to_uppercase());
+                let tema_num = tema_number(&session.tema);
+                let tema_heading = match tema_num {
+                    Some(num) => format!("TEMA {}: {}", num, session.tema.to_uppercase()),
+                    None => session.tema.to_uppercase(),
+                };
+                let session_title_upper = session.title.to_uppercase();
+                let session_title_parts: Vec<String> = session_title_upper
+                    .split(" - ")
+                    .map(|part| escape_typst_text(part))
+                    .collect();
+                let session_title_markup = session_title_parts.join(" #linebreak()\n- ");
+                let sess_title_markup = match tema_num {
+                    Some(num) => {
+                        let left = escape_typst_text(&format!("TEMA {}:", num));
+                        format!("{} {}", left, session_title_markup)
+                    }
+                    None => session_title_markup,
+                };
                 let sess_color = tema_color(&session.tema);
                 r#gen.push_str(&format!(
                     "#set page(footer: none, header: none)\n#set page(fill: rgb(\"{}\"))\n",
@@ -249,7 +267,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     current_tema = Some(session.tema.clone());
                     r#gen.push_str(&format!(
                         "#heading(level: 1)[{}]\n",
-                        escape_typst_text(&session.tema)
+                        escape_typst_text(&tema_heading)
                     ));
                 }
                 r#gen.push_str(&format!(
@@ -264,7 +282,7 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                 );
                 r#gen.push_str(&format!(
                     "#heading(level: 1, outlined: false)[{}]\n\n",
-                    sess_title_upper
+                    sess_title_markup
                 ));
                 r#gen.push_str(&format!(
                     "#pagebreak()\n#set page(fill: none, footer: page-footer, header: [#grid(columns: (auto, 1fr), align: (left, right), text(size: 8.5pt, fill: brand-navy)[{}], image(\"/templates/starter/images/Logo_dark.jpg\", height: 6mm))])\n",
@@ -370,6 +388,15 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                                 escape_typst_text(&more_info_link_text)
                             ));
                         }
+                    }
+                    if let Some(bibliography) = fm.bibliography.as_ref().filter(|b| !b.is_empty()) {
+                        r#gen.push_str("#v(8pt)\n");
+                        r#gen.push_str("#set text(size: 6.5pt)\n");
+                        r#gen.push_str("*References:*\n");
+                        for entry in bibliography.iter() {
+                            r#gen.push_str(&format!("+ {}\n", escape_typst_text(entry)));
+                        }
+                        r#gen.push_str("#set text(size: 10.5pt)\n");
                     }
                     if let Some(tags) = &fm.keywords {
                         let formatted = format_tags(tags);
@@ -554,10 +581,20 @@ fn tema_color(tema: &str) -> &str {
     "#0070c0"
 }
 
+fn tema_number(tema: &str) -> Option<usize> {
+    for (idx, name) in TEMA_ORDER.iter().enumerate() {
+        if tema == *name {
+            return Some(idx + 1);
+        }
+    }
+    None
+}
+
 fn escape_typst_text(input: &str) -> String {
     input
         .replace('\\', "\\\\")
         .replace('#', "\\#")
+        .replace('*', "\\*")
         .replace('<', "\\<")
         .replace('>', "\\>")
         .replace('_', "\\_")

@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 const TEMA_ORDER: [&str; 3] = ["Miljø", "Teknologi", "Organisation"];
-const TYPE_ORDER: [&str; 2] = ["Poster", "Mundtlig"];
+const TYPE_ORDER: [&str; 2] = ["Postere", "Mundtlige Oplæg"];
 
 fn as_str(cell: Option<&Data>) -> String {
     match cell {
@@ -38,54 +38,40 @@ fn detect_locale(header_row: &[String], row: &[String]) -> String {
         .unwrap_or_else(|| "da".to_string())
 }
 
-fn normalize_author_separators(input: &str) -> String {
-    let normalized = input.to_string();
-    // for needle in [" og ", " Og ", " OG "] {
-    //     normalized = normalized.replace(needle, ";");
-    // }
+fn split_list_by_newline_or_semicolon(input: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in input.lines() {
+        for raw in line.split(';') {
+            let chunk = raw.trim();
+            if chunk.is_empty() {
+                continue;
+            }
+            let cleaned = chunk.split_whitespace().collect::<Vec<_>>().join(" ");
+            if !cleaned.is_empty() {
+                out.push(cleaned);
+            }
+        }
+    }
+    out
+}
 
-    let mut out = String::new();
-    let mut ws_count = 0usize;
-    for ch in normalized.chars() {
-        if ch.is_whitespace() {
-            ws_count += 1;
+fn split_list_by_newline(input: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in input.lines() {
+        let chunk = line.trim();
+        if chunk.is_empty() {
             continue;
         }
-        if ws_count > 0 {
-            if ws_count >= 2 {
-                out.push(';');
-            } else {
-                out.push(' ');
-            }
-            ws_count = 0;
-        }
-        out.push(ch);
-    }
-    if ws_count > 0 {
-        if ws_count >= 2 {
-            out.push(';');
-        } else {
-            out.push(' ');
+        let cleaned = chunk.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !cleaned.is_empty() {
+            out.push(cleaned);
         }
     }
     out
 }
 
 fn parse_presenters_and_affiliation(input: &str) -> (Vec<String>, Option<String>) {
-    let normalized = normalize_author_separators(input);
-    let mut presenters: Vec<String> = Vec::new();
-
-    for raw in normalized.split(';') {
-        let chunk = raw.trim();
-        if chunk.is_empty() {
-            continue;
-        }
-        let cleaned = chunk.split_whitespace().collect::<Vec<_>>().join(" ");
-        if !cleaned.is_empty() {
-            presenters.push(cleaned);
-        }
-    }
-
+    let presenters = split_list_by_newline_or_semicolon(input);
     (presenters, None)
 }
 
@@ -111,14 +97,19 @@ fn parse_presentation_type(raw: &str, row: usize) -> Result<String> {
     if trimmed.is_empty() {
         return Err(anyhow!("Missing type at row {}", row));
     }
+    let normalized = match trimmed {
+        "Poster" => "Postere",
+        "Mundtlig" => "Mundtlige Oplæg",
+        _ => trimmed,
+    };
     for allowed in TYPE_ORDER.iter() {
-        if trimmed == *allowed {
+        if normalized == *allowed {
             return Ok(allowed.to_string());
         }
     }
     Err(anyhow!(
-        "Invalid type '{}' at row {} (expected: Poster, Mundtlig)",
-        trimmed,
+        "Invalid type '{}' at row {} (expected: Postere, Mundtlige Oplæg)",
+        normalized,
         row
     ))
 }
@@ -501,6 +492,22 @@ pub fn parse_abstracts_from_rows(
         }
         None
     };
+    let find_col_excluding = |subs: &[&str], exclude: &[&str]| -> Option<usize> {
+        for (j, cell) in lower_row.iter().enumerate() {
+            if exclude
+                .iter()
+                .any(|e| cell.contains(&normalize_ws(e).to_lowercase()))
+            {
+                continue;
+            }
+            for &s in subs {
+                if cell.contains(&normalize_ws(s).to_lowercase()) {
+                    return Some(j);
+                }
+            }
+        }
+        None
+    };
     let find_col_exact = |name: &str| -> Option<usize> {
         for (j, cell) in header_row.iter().enumerate() {
             if cell.trim().eq_ignore_ascii_case(name) {
@@ -516,6 +523,12 @@ pub fn parse_abstracts_from_rows(
     let col_tema = find_col_exact("tema").ok_or_else(|| anyhow!("tema column not found in abstracts"))?;
     let col_type = find_col_exact("type").ok_or_else(|| anyhow!("type column not found in abstracts"))?;
     let col_order = find_col_exact("order").ok_or_else(|| anyhow!("order column not found in abstracts"))?;
+    let col_author_details = find_col(&[
+        "for hver forfatter udfyldes: navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet).",
+        "for hver forfatter udfyldes: navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet)",
+        "for hver forfatter udfyldes",
+        "forfatter udfyldes",
+    ]);
     let col_presenter = find_col(&[
         "hvem præsenterer projektet? navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet).",
         "hvem præsenterer projektet? navn, titel, tilhørsforhold (afdeling, hospital eller andet fx institut, universitet)",
@@ -524,21 +537,41 @@ pub fn parse_abstracts_from_rows(
         "præsenterer projektet",
     ]);
     let col_presenters = find_col(&["presenter", "presenters", "authors", "author", "forfatter"]);
-    if col_presenter.is_none() && col_presenters.is_none() {
-        return Err(anyhow!("presenters column not found in abstracts"));
+    if col_author_details.is_none() && col_presenter.is_none() && col_presenters.is_none() {
+        return Err(anyhow!("authors column not found in abstracts"));
     }
     let col_abstract = find_col(&["abstract", "resum", "resumé"])
         .ok_or_else(|| anyhow!("abstract column not found in abstracts"))?;
     let col_keywords = find_col(&["keyword", "keywords", "nøgle", "emne ord", "emneord"]);
     let col_takehome = find_col(&["take home", "take-home", "takehome", "take home messages"]);
-    let col_reference = find_col(&[
-        "reference",
-        "published",
-        "doi",
-        "reference hvis studiet er publiceret",
-        "link eller doi",
+    let col_reference = find_col_excluding(
+        &[
+            "reference",
+            "published",
+            "doi",
+            "reference hvis studiet er publiceret",
+            "link eller doi",
+        ],
+        &[
+            "litteratur",
+            "litterature",
+            "literatur",
+            "literature",
+            "bibliografi",
+            "bibliography",
+            "references",
+        ],
+    );
+    let col_bibliography = find_col(&[
+        "litteratur referencer",
+        "litteratur",
+        "litterature",
+        "literatur",
+        "literature",
+        "references",
+        "bibliografi",
+        "bibliography",
     ]);
-    let col_literature = find_col(&["litterature", "literature", "references", "literatur"]);
     let col_center = find_col(&["center", "centre", "center/centre"]);
     let col_contact = find_col(&["email", "kontakt", "contact"]);
 
@@ -558,6 +591,10 @@ pub fn parse_abstracts_from_rows(
         let type_raw = row.get(col_type).map(|s| s.trim().to_string()).unwrap_or_default();
         let order_raw = row.get(col_order).map(|s| s.trim().to_string()).unwrap_or_default();
         let presenters_raw = col_presenters
+            .and_then(|idx| row.get(idx))
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let author_details_raw = col_author_details
             .and_then(|idx| row.get(idx))
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
@@ -586,10 +623,11 @@ pub fn parse_abstracts_from_rows(
             .map(|s| normalize_ws(s))
             .unwrap_or_default();
         let reference = extract_reference_link(&reference_raw);
-        let literature = col_literature
+        let bibliography_raw = col_bibliography
             .and_then(|idx| row.get(idx))
-            .map(|s| normalize_ws(s))
-            .filter(|s| !s.is_empty());
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let bibliography = split_list_by_newline(&bibliography_raw);
         let center = col_center
             .and_then(|idx| row.get(idx))
             .map(|s| normalize_ws(s))
@@ -650,9 +688,12 @@ pub fn parse_abstracts_from_rows(
                     ridx + 1
                 ));
             }
-            if presenter_raw.trim().is_empty() && presenters_raw.trim().is_empty() {
+            if presenter_raw.trim().is_empty()
+                && presenters_raw.trim().is_empty()
+                && author_details_raw.trim().is_empty()
+            {
                 return Err(anyhow!(
-                    "Missing presenters for abstract id {} at row {}",
+                    "Missing authors for abstract id {} at row {}",
                     aid,
                     ridx + 1
                 ));
@@ -677,10 +718,12 @@ pub fn parse_abstracts_from_rows(
         let tema = parse_tema(&tema_raw, ridx + 1)?;
         let presentation_type = parse_presentation_type(&type_raw, ridx + 1)?;
         let order = parse_order(&order_raw, ridx + 1)?;
-        let (presenters_vec, affiliation) = if !presenter_raw.is_empty() {
-            parse_presenters_and_affiliation(&presenter_raw)
-        } else {
+        let (presenters_vec, affiliation) = if !author_details_raw.is_empty() {
+            parse_presenters_and_affiliation(&author_details_raw)
+        } else if !presenters_raw.is_empty() {
             parse_presenters_and_affiliation(&presenters_raw)
+        } else {
+            parse_presenters_and_affiliation(&presenter_raw)
         };
         let keywords_vec = keywords
             .split(',')
@@ -702,7 +745,7 @@ pub fn parse_abstracts_from_rows(
             keywords: keywords_vec,
             take_home,
             reference,
-            literature,
+            bibliography,
             locale: locale_val,
         });
     }

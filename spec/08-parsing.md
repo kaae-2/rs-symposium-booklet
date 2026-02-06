@@ -19,7 +19,7 @@ Abstracts sheet
   - keywords/nøgle/emne ord
   - take home/take-home
   - reference/published/doi (including "reference hvis studiet er publiceret" and "link eller DOI")
-  - literature/litterature/references
+  - litteratur referencer/literature/references (including "Litteratur referencer (maks fem).")
   - center/centre
   - email/kontakt/contact
   - locale/sprog
@@ -30,10 +30,13 @@ Abstracts sheet
 - Locale defaults to `da`.
 - Reference values are normalized to a clean URL by extracting the first link or DOI.
 
-Presenters parsing
+Authors parsing
 
-- Presenters are split on `;` or `og`.
-- Each presenter entry is split by comma; the first segment is the presenter name and the last segment becomes a unique affiliation entry.
+- Authors are split on newlines or `;` and kept in order.
+
+Bibliography parsing
+
+- Bibliography entries are split on newlines only; semicolons are preserved.
 
 Grouping/session sheet
 
@@ -47,6 +50,10 @@ Validation rules
 - Missing `id` column aborts.
 - Duplicate abstract IDs abort.
 - Missing references in sessions abort.
+
+Type values
+
+- `type` accepts `Postere` or `Mundtlige Oplæg` (legacy `Poster`/`Mundtlig` are normalized).
 
 Emit parse JSON
 
@@ -62,7 +69,7 @@ Parse JSON format
 
 Abstract object (serialized)
 
-- id, title, presenters, affiliation, center, contact_email, abstract_text, abstract_sections, keywords, take_home, reference, literature, locale
+- id, title, presenters, affiliation, center, contact_email, abstract_text, abstract_sections, keywords, take_home, reference, bibliography, locale
 
 Session object
 

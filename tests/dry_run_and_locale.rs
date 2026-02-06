@@ -58,7 +58,7 @@ fn write_markdown_plan_includes_locale_and_paths() {
             keywords: vec![],
             take_home: None,
             reference: None,
-            literature: None,
+            bibliography: vec![],
             locale: "en".to_string(),
         },
     );

@@ -134,6 +134,12 @@ pub fn write_markdown(
             if let Some(reference) = &abs.reference {
                 writeln!(f, "reference: \"{}\"", yaml_escape(reference))?;
             }
+            if !abs.bibliography.is_empty() {
+                writeln!(f, "bibliography:")?;
+                for entry in abs.bibliography.iter() {
+                    writeln!(f, "  - \"{}\"", yaml_escape(entry))?;
+                }
+            }
             if !abs.abstract_sections.is_empty() {
                 writeln!(f, "sections:")?;
                 for section in abs.abstract_sections.iter() {

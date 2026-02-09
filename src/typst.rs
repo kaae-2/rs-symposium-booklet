@@ -1,8 +1,8 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
-use std::fs::{File, create_dir_all, read_dir, read_to_string};
+use std::fs::{create_dir_all, read_dir, read_to_string, File};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -96,15 +96,23 @@ pub fn emit_typst(outdir: &str, locales_csv: &str, _template: &Option<String>) -
                     continue;
                 }
                 let txt = read_to_string(&p)?;
-                if let Some(start) = txt.find("---")
-                    && let Some(rest) = txt[start + 3..].find("---")
-                {
-                    let fm_text = &txt[start + 3..start + 3 + rest];
-                    let body = txt[start + 3 + rest + 3..].trim().to_string();
+                if let Some((fm_text, body_text)) = split_front_matter(&txt) {
                     match serde_yaml::from_str::<FrontMatter>(fm_text) {
-                        Ok(fm) => abstracts.push((fm, body)),
-                        Err(_) => continue,
+                        Ok(fm) => abstracts.push((fm, body_text.trim().to_string())),
+                        Err(err) => {
+                            tracing::warn!(
+                                "Skipping markdown file due to invalid frontmatter: {} ({})",
+                                p.display(),
+                                err
+                            );
+                            continue;
+                        }
                     }
+                } else {
+                    tracing::warn!(
+                        "Skipping markdown file without valid frontmatter delimiters: {}",
+                        p.display()
+                    );
                 }
             }
 
@@ -587,6 +595,31 @@ fn tema_number(tema: &str) -> Option<usize> {
             return Some(idx + 1);
         }
     }
+    None
+}
+
+fn split_front_matter(input: &str) -> Option<(&str, &str)> {
+    let first_newline = input.find('\n').map(|idx| idx + 1).unwrap_or(input.len());
+    let first_line = input[..first_newline].trim_end_matches(['\r', '\n']);
+    if first_line.trim() != "---" {
+        return None;
+    }
+
+    let mut cursor = first_newline;
+    while cursor < input.len() {
+        let next_newline = input[cursor..]
+            .find('\n')
+            .map(|idx| cursor + idx + 1)
+            .unwrap_or(input.len());
+        let line = input[cursor..next_newline].trim_end_matches(['\r', '\n']);
+        if line.trim() == "---" {
+            let fm = &input[first_newline..cursor];
+            let body = &input[next_newline..];
+            return Some((fm, body));
+        }
+        cursor = next_newline;
+    }
+
     None
 }
 
